@@ -99,6 +99,11 @@ ACP 桥接只允许访问本机回环地址。悬浮语音客户端默认连接
 
 同时感谢 DeepSeek Harness 团队提供插件平台和开发者社区。
 
+## 社区讨论
+
+- [Qwen Audio Agent 社区：DSH Qwen Voice](https://github.com/QwenAudio/qwen-audio-agent/discussions/154)
+- [DeepSeek Harness 社区：DSH Qwen Voice](https://github.com/deepseek-ai/deepseek-harness/discussions/1038)
+
 ## 许可证
 
 本项目采用 MIT 许可证。改编的 Qwen Audio Agent 音频传输逻辑记录在 `NOTICE`

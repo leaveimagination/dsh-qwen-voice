@@ -96,6 +96,11 @@ reimplementation of Qwen Audio Agent.
 
 Thanks also to the DeepSeek Harness team for the plugin platform and community.
 
+## Community discussions
+
+- [Qwen Audio Agent community: DSH Qwen Voice](https://github.com/QwenAudio/qwen-audio-agent/discussions/154)
+- [DeepSeek Harness community: DSH Qwen Voice](https://github.com/deepseek-ai/deepseek-harness/discussions/1038)
+
 ## License
 
 MIT. Adapted audio transport logic is noted in `NOTICE`; Qwen Audio Agent is
