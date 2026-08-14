@@ -1,5 +1,7 @@
 # DSH Qwen Voice
 
+[简体中文](./README_ZH.md) | English
+
 Experimental voice-control plugin for DeepSeek Harness Web, **built on top of**
 [Qwen Audio Agent](https://github.com/QwenAudio/qwen-audio-agent).
 
