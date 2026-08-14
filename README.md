@@ -58,6 +58,10 @@ installed Qwen Audio Agent 1.10.0:
 - separate ACP coordinator sessions per work item;
 - allow an explicitly configured DSH loopback origin on another port.
 
+Task cards use the Gateway's authoritative task status. Cancelling a task now
+shows an in-progress state, confirms the Gateway response, and reports failures
+instead of silently sending a request.
+
 The script refuses unknown Qwen Audio Agent versions and is safe to rerun.
 Reinstalling the upstream package removes the patch.
 

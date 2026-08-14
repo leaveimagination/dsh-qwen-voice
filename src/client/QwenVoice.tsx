@@ -143,7 +143,9 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
   const updateTask = useCallback((event: GatewayEvent): void => {
     const task = event.task
     if (!task?.id || !event.type?.startsWith('task.')) return
-    const phase = event.type.slice('task.'.length)
+    // Delivery/notification events still carry the authoritative task status.
+    // Prefer it so a terminal task never regresses to "notification.delivered".
+    const phase = task.status || event.type.slice('task.'.length)
     const title = task.delegation?.title || task.objective || 'DSH 会话任务'
     setTasks(current => {
       const next: TaskView = {
@@ -160,6 +162,30 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
         : current.map(item => item.id === next.id ? { ...item, ...next } : item)
       return updated.slice(0, 6)
     })
+  }, [])
+
+  const cancelTask = useCallback(async (taskId: string): Promise<void> => {
+    setError('')
+    setTasks(current => current.map(task => (
+      task.id === taskId ? { ...task, phase: 'cancelling' } : task
+    )))
+    try {
+      const response = await fetch(
+        `${GATEWAY_ORIGIN}/api/tasks/${encodeURIComponent(taskId)}`,
+        { method: 'DELETE' },
+      )
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const body = await response.json() as { task?: { status?: string }; status?: string }
+      const phase = body.task?.status || body.status || 'cancelled'
+      setTasks(current => current.map(task => (
+        task.id === taskId ? { ...task, phase } : task
+      )))
+    } catch (reason) {
+      setTasks(current => current.map(task => (
+        task.id === taskId ? { ...task, phase: 'failed' } : task
+      )))
+      setError(`中断失败：${reason instanceof Error ? reason.message : String(reason)}`)
+    }
   }, [])
 
   useEffect(() => {
@@ -376,7 +402,16 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
                   </span>
                   <span className={css.taskActions}>
                     {task.targetSessionId && <button type="button" onClick={() => props.openSession(task.targetSessionId as string)}>打开</button>}
-                    {!['completed', 'failed', 'cancelled'].includes(task.phase) && <button type="button" data-danger onClick={() => { void fetch(`${GATEWAY_ORIGIN}/api/tasks/${encodeURIComponent(task.id)}`, { method: 'DELETE' }) }}>中断</button>}
+                    {!['completed', 'failed', 'cancelled'].includes(task.phase) && (
+                      <button
+                        type="button"
+                        data-danger
+                        disabled={task.phase === 'cancelling'}
+                        onClick={() => { void cancelTask(task.id) }}
+                      >
+                        {task.phase === 'cancelling' ? '中断中…' : '中断'}
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
