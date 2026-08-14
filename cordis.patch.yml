@@ -1,0 +1,4 @@
+- insert:
+    - id: qwen-voice
+      name: dsh-qwen-voice
+      config: {}

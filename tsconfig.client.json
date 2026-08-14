@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": [],
+    "rootDir": "src/client",
+    "declarationDir": "lib/types/client",
+    "outDir": "lib/client"
+  },
+  "include": ["src/client", "src/css-modules.d.ts"],
+  "exclude": []
+}
