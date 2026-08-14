@@ -1,2 +1,7 @@
-This plugin contains adapted audio transport logic from Qwen Audio Agent
+DSH Qwen Voice is built on top of Qwen Audio Agent
 (https://github.com/QwenAudio/qwen-audio-agent), licensed under Apache-2.0.
+
+It uses Qwen Audio Agent as its realtime voice engine and contains adapted
+audio transport logic. We gratefully acknowledge the Qwen Audio Agent
+maintainers and contributors whose open-source work made this integration
+possible.

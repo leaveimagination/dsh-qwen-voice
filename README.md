@@ -1,7 +1,13 @@
 # DSH Qwen Voice
 
-Experimental voice-control plugin for DeepSeek Harness Web, powered by
+Experimental voice-control plugin for DeepSeek Harness Web, **built on top of**
 [Qwen Audio Agent](https://github.com/QwenAudio/qwen-audio-agent).
+
+> This project would not exist without Qwen Audio Agent. It reuses Qwen Audio
+> Agent as the realtime voice engine and adds the DeepSeek Harness plugin UI,
+> ACP bridge, and multi-session routing integration around it. Our sincere
+> thanks to the Qwen Audio Agent maintainers and every upstream contributor for
+> releasing their excellent work as open source.
 
 It adds a floating voice orb that remains connected while switching DSH
 conversations. One browser tab can dispatch multiple named DSH sessions,
@@ -72,7 +78,20 @@ the local gateway at `127.0.0.1:3101`.
 - Session titles are generated from the spoken task objective and may still
   require manual renaming for ambiguous requests.
 
+## Acknowledgements
+
+Special thanks to the
+[Qwen Audio Agent team and contributors](https://github.com/QwenAudio/qwen-audio-agent/graphs/contributors).
+They built and open-sourced the realtime voice frontend, gateway, audio
+transport, provider integration, and agent coordination foundation on which
+this DSH integration is based. This repository focuses on connecting that
+foundation to DeepSeek Harness; it is not a replacement for or independent
+reimplementation of Qwen Audio Agent.
+
+Thanks also to the DeepSeek Harness team for the plugin platform and community.
+
 ## License
 
 MIT. Adapted audio transport logic is noted in `NOTICE`; Qwen Audio Agent is
-Apache-2.0 licensed.
+Apache-2.0 licensed. Please retain the upstream attribution when redistributing
+this integration.
