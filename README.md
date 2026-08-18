@@ -1,31 +1,42 @@
 # DSH Qwen Voice
 
-[简体中文](./README_ZH.md) | English
+简体中文 | [English](./README_EN.md)
 
-Experimental voice-control plugin for DeepSeek Harness Web, **built on top of**
-[Qwen Audio Agent](https://github.com/QwenAudio/qwen-audio-agent).
+这是一个基于 [Qwen Audio Agent](https://github.com/QwenAudio/qwen-audio-agent)
+构建的 DeepSeek Harness Web 实验性语音控制插件。
 
-> This project would not exist without Qwen Audio Agent. It reuses Qwen Audio
-> Agent as the realtime voice engine and adds the DeepSeek Harness plugin UI,
-> ACP bridge, and multi-session routing integration around it. Our sincere
-> thanks to the Qwen Audio Agent maintainers and every upstream contributor for
-> releasing their excellent work as open source.
+> 如果没有 Qwen Audio Agent，就不会有这个项目。本项目使用 Qwen Audio
+> Agent 作为实时语音引擎，并在其基础上增加 DeepSeek Harness 插件界面、
+> ACP 桥接和多会话任务路由。衷心感谢 Qwen Audio Agent 的维护者和所有贡献者，
+> 感谢他们将优秀的实时语音 Agent 能力开源给社区。
 
-It adds a floating voice orb that remains connected while switching DSH
-conversations. One browser tab can dispatch multiple named DSH sessions,
-show live task state, interrupt playback, and announce results as tasks finish.
+插件会在 Harness 页面加入一个悬浮语音球。切换 DSH 会话时，实时语音连接不会
+断开。用户可以在同一个浏览器标签页中，通过语音创建、继续和调度多个有名称的
+DSH 会话，并在悬浮面板中查看任务状态。
 
-## Compatibility
+## 主要功能
+
+- 切换 Harness 会话时保持实时语音连接；
+- 通过自然语言创建、继续和调度多个 DSH 会话；
+- 在一个浏览器标签页中并行安排多个任务；
+- 显示最新任务及其执行状态；
+- 支持中断语音播放；
+- 中断任务时显示处理中状态，并根据 Gateway 返回结果确认成功或报告失败；
+- 任务完成后及时播报，不必等待全部任务结束；
+- 通过播放状态回执减少重复播报；
+- 根据任务目标生成更容易识别的侧边栏会话名称。
+
+## 兼容版本
 
 - DeepSeek Harness Web `0.1.0-rc.6`
 - Qwen Audio Agent `1.10.0`
-- Node.js supported by both upstream projects
-- Windows launcher included; the plugin and bridge are cross-platform Node.js
+- 同时满足两个上游项目要求的 Node.js 版本
+- 提供 Windows 启动脚本；插件和 ACP 桥接本身使用跨平台 Node.js
 
-This is a community integration, not an official DeepSeek or Qwen release.
-Both upstream projects are evolving quickly, so exact versions matter.
+本项目是社区集成，不是 DeepSeek 或 Qwen 的官方版本。两个上游项目仍在快速
+迭代，因此目前需要严格匹配上述版本。
 
-## Install
+## 安装
 
 ```powershell
 npm.cmd install --global qwen-audio-agent@1.10.0
@@ -37,39 +48,34 @@ pnpm --dir bridge install
 npx.cmd -p @deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add .
 ```
 
-Copy `start-qwen-dsh-voice.example.cmd` to a local filename, adjust
-`ACP_WORKSPACE` if needed, then start the gateway:
+复制 `start-qwen-dsh-voice.example.cmd`，保存为你自己的本地启动脚本。
+如果需要，请修改其中的 `ACP_WORKSPACE`，然后启动语音 Gateway：
 
 ```powershell
 .\start-qwen-dsh-voice.example.cmd webui
 ```
 
-Restart DSH Web and open `http://127.0.0.1:3080`.
+重启 DSH Web，并打开 `http://127.0.0.1:3080`。
 
-Qwen/DashScope credentials remain in Qwen Audio Agent configuration. No API
-key is included in this repository or sent through the DSH browser bundle.
+Qwen 或 DashScope 凭证只保存在 Qwen Audio Agent 的本地配置中。仓库和 DSH
+浏览器插件包均不包含 API Key。
 
-## What the compatibility patch changes
+## 临时兼容补丁
 
-`pnpm setup:qwen` applies version-checked integration changes to the globally
-installed Qwen Audio Agent 1.10.0:
+`pnpm setup:qwen` 会对全局安装的 Qwen Audio Agent `1.10.0` 应用带版本检查的
+兼容修改：
 
-- separate coordinator lanes for simultaneous voice turns;
-- keep one persistent ACP Coordinator Session per authenticated owner;
-- allow an explicitly configured DSH loopback origin on another port.
-- install the authenticated local DSH Session API and Task Manager lifecycle;
-- expose target Session identity in task snapshots;
-- disable the obsolete first-session continuation fallback when present.
+- 为同时发出的语音任务建立独立的协调通道；
+- 每个认证用户只保留一个长期 ACP Coordinator Session；
+- 允许管理员明确配置的 DSH 本机回环地址跨端口访问 Gateway。
+- 安装带鉴权的本地 DSH Session API，并接入 Task Manager 生命周期；
+- 在任务快照中保留目标 Session 身份；
+- 存在旧的“继续时直接选第一个 Session”分支时将其禁用。
 
-Task cards use the Gateway's authoritative task status. Cancelling a task now
-shows an in-progress state, confirms the Gateway response, and reports failures
-instead of silently sending a request.
+脚本遇到未知版本时会拒绝修改，并且可以安全地重复运行。重新安装 Qwen Audio
+Agent 会移除这些临时修改；之后重新执行 `pnpm setup:qwen` 即可恢复完整接线。
 
-The script refuses unknown Qwen Audio Agent versions and is safe to rerun.
-Reinstalling the upstream package removes the patch; run `pnpm setup:qwen`
-again afterward to restore the integration.
-
-## Development
+## 开发与验证
 
 ```powershell
 pnpm typecheck
@@ -77,36 +83,39 @@ pnpm build
 pnpm --dir bridge test
 ```
 
-The ACP bridge accepts loopback DSH URLs only. The floating client defaults to
-the local gateway at `127.0.0.1:3101`.
+ACP 桥接只允许访问本机回环地址。悬浮语音客户端默认连接
+`127.0.0.1:3101` 的本地 Gateway。
 
-## Known limitations
+## 已知限制
 
-- Developer-preview compatibility is pinned to DSH `0.1.0-rc.6`.
-- The Qwen compatibility patch is temporary and should eventually be replaced
-  by upstream extension points.
-- Session titles are generated from the spoken task objective and may still
-  require manual renaming for ambiguous requests.
+- 当前开发预览版只验证了 DSH `0.1.0-rc.6`；
+- Qwen 兼容补丁是临时方案，后续应尽量替换为上游正式扩展接口；
+- 会话名称根据语音任务目标生成，表达含糊时可能仍需手动重命名。
 
-## Acknowledgements
+## 致谢
 
-Special thanks to the
-[Qwen Audio Agent team and contributors](https://github.com/QwenAudio/qwen-audio-agent/graphs/contributors).
-They built and open-sourced the realtime voice frontend, gateway, audio
-transport, provider integration, and agent coordination foundation on which
-this DSH integration is based. This repository focuses on connecting that
-foundation to DeepSeek Harness; it is not a replacement for or independent
-reimplementation of Qwen Audio Agent.
+特别感谢
+[Qwen Audio Agent 团队和所有贡献者](https://github.com/QwenAudio/qwen-audio-agent/graphs/contributors)。
+他们开发并开源了本项目赖以运行的实时语音前端、Gateway、音频传输、模型供应商
+接入和 Agent 协调基础能力。本仓库的重点是将这些能力接入 DeepSeek Harness，
+它不是对 Qwen Audio Agent 的替代品，也不是独立重写版本。
 
-Thanks also to the DeepSeek Harness team for the plugin platform and community.
+同时感谢 DeepSeek Harness 团队提供插件平台和开发者社区。
 
-## Community discussions
+## 社区讨论
 
-- [Qwen Audio Agent community: DSH Qwen Voice](https://github.com/QwenAudio/qwen-audio-agent/discussions/154)
-- [DeepSeek Harness community: DSH Qwen Voice](https://github.com/deepseek-ai/deepseek-harness/discussions/1038)
+- [Qwen Audio Agent 社区：DSH Qwen Voice](https://github.com/QwenAudio/qwen-audio-agent/discussions/154)
+- [DeepSeek Harness 社区：DSH Qwen Voice](https://github.com/deepseek-ai/deepseek-harness/discussions/1038)
 
-## License
+## 许可证
 
-MIT. Adapted audio transport logic is noted in `NOTICE`; Qwen Audio Agent is
-Apache-2.0 licensed. Please retain the upstream attribution when redistributing
-this integration.
+本项目采用 MIT 许可证。改编的 Qwen Audio Agent 音频传输逻辑记录在 `NOTICE`
+中；Qwen Audio Agent 采用 Apache-2.0 许可证。重新分发本集成时，请保留相关
+上游署名。
+# 协调会话绑定
+
+语音悬浮面板会显示当前 Coordinator。首次使用时，在目标 DSH 会话中点击
+“设为协调会话”；需要更换时，在新会话中点击“由当前会话接管”并确认。
+Session ID 由 DSH 当前会话状态提供并由 Gateway 再次验证，用户无需复制或编辑。
+
+本地 `rebind-coordinator` 命令仅作为网页不可用时的灾难恢复手段。
