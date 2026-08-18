@@ -51,19 +51,23 @@ key is included in this repository or sent through the DSH browser bundle.
 
 ## What the compatibility patch changes
 
-`pnpm setup:qwen` applies three small, version-checked changes to the globally
+`pnpm setup:qwen` applies version-checked integration changes to the globally
 installed Qwen Audio Agent 1.10.0:
 
 - separate coordinator lanes for simultaneous voice turns;
-- separate ACP coordinator sessions per work item;
+- keep one persistent ACP Coordinator Session per authenticated owner;
 - allow an explicitly configured DSH loopback origin on another port.
+- install the authenticated local DSH Session API and Task Manager lifecycle;
+- expose target Session identity in task snapshots;
+- disable the obsolete first-session continuation fallback when present.
 
 Task cards use the Gateway's authoritative task status. Cancelling a task now
 shows an in-progress state, confirms the Gateway response, and reports failures
 instead of silently sending a request.
 
 The script refuses unknown Qwen Audio Agent versions and is safe to rerun.
-Reinstalling the upstream package removes the patch.
+Reinstalling the upstream package removes the patch; run `pnpm setup:qwen`
+again afterward to restore the integration.
 
 ## Development
 

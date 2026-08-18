@@ -1,0 +1,65 @@
+  /** Run a trusted local project-session operation through normal delegation events. */
+  async runManagedProjectSession(action, input, {
+    ownerId,
+    coordinationRunId,
+    cwd,
+    signal,
+    onEvent,
+  } = {}) {
+    const run = {
+      ownerId: clean(ownerId),
+      coordinationRunId: clean(coordinationRunId),
+      cwd: clean(cwd) || this.directory,
+      onEvent,
+      delegation: null,
+      nativeToolCalls: new Map(),
+      toolCalls: new Map(),
+      initialPromptDone: true,
+      receivedUpdate: false,
+    }
+    if (signal?.aborted) throw signal.reason || new Error('Task cancelled')
+    const started = action === 'start'
+      ? await this.startProjectSession(run, input)
+      : await this.continueProjectSession(run, input)
+    const record = run.delegation
+    onEvent?.({
+      type: 'backend.delegated',
+      delegation: {
+        id: record.id,
+        sessionId: record.sessionId,
+        status: record.status,
+        title: record.title,
+        directory: record.directory,
+      },
+    })
+    const abort = () => {
+      void this.cancelDelegation({ delegation_id: record.id }).catch(() => {})
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+    try {
+      const result = await record.promise
+      onEvent?.({
+        type: 'backend.delegation.completed',
+        delegation: {
+          id: record.id,
+          sessionId: record.sessionId,
+          status: 'completed',
+          title: record.title,
+          directory: record.directory,
+        },
+      })
+      return {
+        content: clean(result?.content),
+        metadata: {
+          delegation: started,
+          presentation: {
+            speech: clean(result?.content),
+            inline: null,
+          },
+        },
+      }
+    } finally {
+      signal?.removeEventListener('abort', abort)
+    }
+  }
+

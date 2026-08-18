@@ -6,12 +6,18 @@ import { decodePcm, pcmBase64, resample } from './audio.ts'
 import css from './QwenVoice.module.css'
 
 type VoiceProps = PropsRuntime<'shell.overlay'> & {
-  openSession(sessionId: string): void
+  openSession(sessionId: string): Promise<void>
 }
 type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
 const GATEWAY_ORIGIN = 'http://127.0.0.1:3101'
+const DSH_API_TOKEN = 'dsh-local-3cf6f8d1a4e74279b5377ad91804e945'
 const INPUT_RATE = 16000
+
+interface CoordinatorBinding {
+  sessionId: string
+  cwd: string
+}
 
 interface GatewayEvent {
   type?: string
@@ -63,6 +69,10 @@ function persistentVoiceSessionId(): string {
   return created
 }
 
+function persistentSidebarOpen(): boolean {
+  return localStorage.getItem('dsh-qwen-voice.sidebar-open') !== 'false'
+}
+
 function labelFor(state: VoiceState, enabled: boolean, connected: boolean): string {
   if (!connected) return '正在连接 Qwen Audio Agent'
   if (!enabled) return 'Qwen 语音待命'
@@ -91,12 +101,14 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
   const currentSessionId = props.useSessions(value => value.current)
   const [sessionId] = useState(persistentVoiceSessionId)
   const [enabled, setEnabled] = useState(false)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(persistentSidebarOpen)
   const [connected, setConnected] = useState(false)
   const [state, setState] = useState<VoiceState>('idle')
   const [transcript, setTranscript] = useState('点击麦克风，然后直接说出任务。')
   const [error, setError] = useState('')
   const [tasks, setTasks] = useState<TaskView[]>([])
+  const [coordinatorBinding, setCoordinatorBinding] = useState<CoordinatorBinding | null>(null)
+  const [bindingBusy, setBindingBusy] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const playbackCursorRef = useRef(0)
@@ -111,6 +123,10 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
     setError('')
     setEnabled(value => !value)
   }, [])
+
+  useEffect(() => {
+    localStorage.setItem('dsh-qwen-voice.sidebar-open', String(open))
+  }, [open])
 
   useEffect(() => {
     const button = buttonRef.current
@@ -187,6 +203,67 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
       setError(`中断失败：${reason instanceof Error ? reason.message : String(reason)}`)
     }
   }, [])
+
+  const openTaskSession = useCallback(async (sessionId: string): Promise<void> => {
+    setError('')
+    try {
+      await props.openSession(sessionId)
+      setOpen(false)
+    } catch (reason) {
+      setError(`打开目标会话失败：${reason instanceof Error ? reason.message : String(reason)}`)
+    }
+  }, [props.openSession])
+
+  const refreshCoordinatorBinding = useCallback(async (): Promise<void> => {
+    try {
+      const response = await fetch(`${GATEWAY_ORIGIN}/api/dsh/coordinator-binding`, {
+        headers: { 'x-dsh-qwen-token': DSH_API_TOKEN },
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const body = await response.json() as { binding?: CoordinatorBinding | null }
+      setCoordinatorBinding(body.binding || null)
+    } catch (reason) {
+      setError(`无法读取协调会话绑定：${reason instanceof Error ? reason.message : String(reason)}`)
+    }
+  }, [])
+
+  const bindCurrentSession = useCallback(async (): Promise<void> => {
+    const selectedSessionId = String(currentSessionId || '')
+    if (!selectedSessionId) {
+      setError('请先在左侧打开一个 DSH 会话。')
+      return
+    }
+    const takeover = Boolean(
+      coordinatorBinding?.sessionId
+      && coordinatorBinding.sessionId !== selectedSessionId
+    )
+    if (takeover && !window.confirm(
+      `当前协调会话是 ${coordinatorBinding?.sessionId}。\n\n确定由当前会话接管吗？正在运行的后台任务不会被取消。`,
+    )) return
+    setBindingBusy(true)
+    setError('')
+    try {
+      const response = await fetch(`${GATEWAY_ORIGIN}/api/dsh/coordinator-binding`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-dsh-qwen-token': DSH_API_TOKEN,
+        },
+        body: JSON.stringify({ session_id: selectedSessionId }),
+      })
+      const body = await response.json() as CoordinatorBinding & { message?: string; error?: string }
+      if (!response.ok) throw new Error(body.message || body.error || `HTTP ${response.status}`)
+      setCoordinatorBinding({ sessionId: body.sessionId, cwd: body.cwd })
+    } catch (reason) {
+      setError(`协调会话绑定失败：${reason instanceof Error ? reason.message : String(reason)}`)
+    } finally {
+      setBindingBusy(false)
+    }
+  }, [coordinatorBinding, currentSessionId])
+
+  useEffect(() => {
+    if (open) void refreshCoordinatorBinding()
+  }, [open, refreshCoordinatorBinding])
 
   useEffect(() => {
     let disposed = false
@@ -359,7 +436,7 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
   const status = labelFor(state, enabled, connected)
   const activeCount = tasks.filter(task => !['completed', 'failed', 'cancelled'].includes(task.phase)).length
   return createPortal((
-    <div className={css.root}>
+    <div className={css.root} data-open={open}>
       {enabled && <span className={css.pulse} aria-hidden />}
       <button
         ref={buttonRef}
@@ -381,9 +458,34 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
         <section className={css.panel} aria-live="polite">
           <div className={css.head}>
             <span className={css.status}><i className={css.dot} data-connected={connected} /><span><b>Qwen 语音协调中心</b><small>{status}{activeCount > 0 ? ` · ${activeCount} 项活跃` : ''}</small></span></span>
-            <button type="button" className={css.button} aria-label="关闭语音面板" onClick={() => setOpen(false)}>×</button>
+            <button type="button" className={css.closeButton} aria-label="收起语音侧边栏" title="收起侧边栏" onClick={() => setOpen(false)}>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><path fill="currentColor" d="m14.7 6.3-5 5a1 1 0 0 0 0 1.4l5 5 1.4-1.4-4.3-4.3 4.3-4.3-1.4-1.4Z" /></svg>
+            </button>
           </div>
           <p className={css.transcript}>{transcript}</p>
+          <div className={css.coordinator}>
+            <span>
+              <b>协调会话</b>
+              <small>{coordinatorBinding
+                ? (String(currentSessionId || '') === coordinatorBinding.sessionId
+                    ? '当前会话正在担任 Coordinator'
+                    : `已绑定 ${coordinatorBinding.sessionId.slice(0, 20)}…`)
+                : '尚未绑定，请选择当前会话'}</small>
+            </span>
+            <button
+              type="button"
+              disabled={bindingBusy || !currentSessionId}
+              onClick={() => { void bindCurrentSession() }}
+            >
+              {bindingBusy
+                ? '验证中…'
+                : coordinatorBinding?.sessionId === String(currentSessionId || '')
+                  ? '重新验证'
+                  : coordinatorBinding
+                    ? '由当前会话接管'
+                    : '设为协调会话'}
+            </button>
+          </div>
           <div className={css.commands}>
             <b>单页多会话指令</b>
             <span>“新建前端开发会话，让它做登录页”</span>
@@ -401,7 +503,9 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
                     <small>{taskPhaseLabel(task.phase)}{task.elapsedMs > 0 ? ` · ${Math.round(task.elapsedMs / 1000)}s` : ''}</small>
                   </span>
                   <span className={css.taskActions}>
-                    {task.targetSessionId && <button type="button" onClick={() => props.openSession(task.targetSessionId as string)}>打开</button>}
+                    {task.targetSessionId && (
+                      <button type="button" onClick={() => { void openTaskSession(task.targetSessionId as string) }}>打开</button>
+                    )}
                     {!['completed', 'failed', 'cancelled'].includes(task.phase) && (
                       <button
                         type="button"

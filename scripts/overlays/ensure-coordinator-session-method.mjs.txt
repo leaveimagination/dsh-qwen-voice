@@ -1,0 +1,85 @@
+  async ensureCoordinatorSession(ownerId, mcpServers = []) {
+    if (this.builtinMcp.length) this.builtinMcpLifecycle.markUsed()
+    const key = coordinatorKey(ownerId, this.protocol)
+    const binding = this.protocol === 'acp'
+      ? readDshCoordinatorBinding()
+      : null
+    if (this.protocol === 'acp' && !binding) {
+      throw new AgentError(
+        'COORDINATOR_UNAVAILABLE: DSH Coordinator binding is missing or invalid',
+        { status: 503, protocol: this.protocol },
+      )
+    }
+    if (this.coordinatorSessions.has(key)) {
+      const cached = this.coordinatorSessions.get(key)
+      if (binding && clean(cached?.sessionId) !== binding.sessionId) {
+        throw new AgentError(
+          'COORDINATOR_UNAVAILABLE: Coordinator binding changed; restart the Qwen Gateway',
+          { status: 503, protocol: this.protocol },
+        )
+      }
+      return cached
+    }
+    if (this.coordinatorSessionPromises.has(key)) {
+      return this.coordinatorSessionPromises.get(key)
+    }
+    const pending = (async () => {
+      const stored = binding || this.registry.get(key)
+      let session
+      if (stored?.sessionId) {
+        try {
+          session = await this.client.resumeSession(stored.sessionId, {
+            cwd: stored.cwd || this.directory,
+            mcpServers,
+            meta: this.coordinatorMeta(ownerId),
+            ownerId,
+            role: 'coordinator',
+          })
+          const accepted = this.profile.acceptResumedSession?.({
+            session,
+            role: 'coordinator',
+            coordinatorAgent: this.coordinatorAgent,
+          }) !== false
+          if (!accepted) {
+            if (binding) {
+              throw new Error('bound Session was rejected by the backend profile')
+            }
+            this.registry.delete(key)
+            session = null
+          } else {
+            session.isNew = false
+          }
+        } catch (error) {
+          if (binding) {
+            throw new AgentError(
+              `COORDINATOR_UNAVAILABLE: bound DSH Coordinator ${binding.sessionId} cannot be resumed: ${clean(error?.message) || 'unknown error'}`,
+              { status: 503, protocol: this.protocol },
+            )
+          }
+          this.registry.delete(key)
+        }
+      }
+      if (!session) {
+        if (binding) {
+          throw new AgentError(
+            `COORDINATOR_UNAVAILABLE: bound DSH Coordinator ${binding.sessionId} is unavailable`,
+            { status: 503, protocol: this.protocol },
+          )
+        }
+        session = await this.client.newSession({
+          cwd: this.directory,
+          mcpServers,
+          meta: this.coordinatorMeta(ownerId),
+          ownerId,
+          role: 'coordinator',
+        })
+        session.isNew = true
+      }
+      await this.configureSession(session, 'coordinator')
+      this.coordinatorSessions.set(key, session)
+      this.registry.set(key, session)
+      return session
+    })().finally(() => this.coordinatorSessionPromises.delete(key))
+    this.coordinatorSessionPromises.set(key, pending)
+    return pending
+  }

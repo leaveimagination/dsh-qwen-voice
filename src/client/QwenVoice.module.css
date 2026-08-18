@@ -1,20 +1,33 @@
-.root { position: fixed; right: 22px; bottom: 22px; z-index: 1200; display: inline-flex; align-items: center; pointer-events: auto; }
-.button { width: 54px; height: 54px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; display: grid; place-items: center; color: white; background: linear-gradient(145deg,#282b34,#111318); box-shadow: 0 12px 34px rgba(0,0,0,.28); cursor: pointer; transition: color .16s ease, background .16s ease, transform .16s ease; }
+.root { position: fixed; right: 18px; bottom: 18px; z-index: 1200; pointer-events: auto; }
+.root[data-open='true'] { top: 0; right: 0; bottom: 0; width: min(388px, 100vw); }
+.button { position: absolute; right: 0; bottom: 0; z-index: 3; width: 56px; height: 56px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; display: grid; place-items: center; color: white; background: linear-gradient(145deg,#282b34,#111318); box-shadow: 0 12px 34px rgba(0,0,0,.28); cursor: pointer; transition: color .16s ease, background .16s ease, transform .16s ease; }
+.root[data-open='true'] > .button { right: 18px; bottom: 18px; }
 .button:hover { color: white; transform: translateY(-2px); background: linear-gradient(145deg,#353945,#17191f); }
 .button:focus-visible { outline: 2px solid #6d5dfc; outline-offset: 2px; }
 .button[data-active='true'] { color: white; background: linear-gradient(135deg,#7357ff,#2e9bff); box-shadow: 0 0 0 4px rgba(101,91,255,.14); }
 .button[data-state='speaking'] { background: linear-gradient(135deg,#16a085,#2ecc71); }
 .button[data-error='true'] { color: white; background: #d14343; }
-.pulse { position: absolute; inset: -3px; border: 1px solid rgba(101,91,255,.45); border-radius: 999px; pointer-events: none; animation: pulse 1.5s ease-out infinite; }
-.panel { position: absolute; right: 0; bottom: 66px; width: min(380px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 110px)); overflow: auto; padding: 12px; border: 1px solid rgba(127,127,127,.22); border-radius: 16px; background: color-mix(in srgb, Canvas 94%, transparent); color: CanvasText; box-shadow: 0 16px 46px rgba(0,0,0,.22); backdrop-filter: blur(18px); z-index: 50; }
-.head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+.pulse { position: absolute; right: -3px; bottom: -3px; z-index: 2; width: 62px; height: 62px; border: 1px solid rgba(101,91,255,.45); border-radius: 999px; pointer-events: none; animation: pulse 1.5s ease-out infinite; }
+.root[data-open='true'] .pulse { right: 15px; bottom: 15px; }
+.panel { box-sizing: border-box; position: absolute; inset: 0; overflow: auto; padding: 16px 16px 92px; border: 0; border-left: 1px solid color-mix(in srgb, CanvasText 12%, transparent); border-radius: 0; background: color-mix(in srgb, Canvas 97%, transparent); color: CanvasText; box-shadow: -12px 0 34px rgba(0,0,0,.12); backdrop-filter: blur(18px); }
+.head { position: sticky; top: -16px; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -16px -16px 0; padding: 16px; border-bottom: 1px solid color-mix(in srgb, CanvasText 8%, transparent); background: color-mix(in srgb, Canvas 96%, transparent); font-size: 12px; backdrop-filter: blur(18px); }
 .status { display: inline-flex; align-items: center; gap: 7px; }
 .status > span { display: grid; gap: 1px; }
 .status b { font-size: 12px; }
 .status small { font-size: 10px; font-weight: 500; opacity: .65; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: #a0a7b2; }
 .dot[data-connected='true'] { background: #20b26b; box-shadow: 0 0 0 3px rgba(32,178,107,.15); }
+.closeButton { width: 44px; height: 44px; flex: 0 0 auto; border: 0; border-radius: 10px; display: grid; place-items: center; color: CanvasText; background: transparent; cursor: pointer; }
+.closeButton:hover { background: color-mix(in srgb, CanvasText 7%, transparent); }
+.closeButton:focus-visible { outline: 2px solid #6d5dfc; outline-offset: 2px; }
 .transcript { margin: 10px 0 0; min-height: 38px; font-size: 13px; line-height: 1.55; color: color-mix(in srgb, CanvasText 84%, transparent); }
+.coordinator { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 9px 10px; border: 1px solid color-mix(in srgb, CanvasText 10%, transparent); border-radius: 10px; }
+.coordinator > span { display: grid; min-width: 0; gap: 2px; }
+.coordinator b { font-size: 12px; }
+.coordinator small { overflow: hidden; font-size: 10px; opacity: .65; text-overflow: ellipsis; white-space: nowrap; }
+.coordinator button { flex: 0 0 auto; padding: 5px 8px; border: 1px solid color-mix(in srgb, CanvasText 15%, transparent); border-radius: 7px; color: CanvasText; background: transparent; font-size: 10px; cursor: pointer; }
+.coordinator button:hover:not(:disabled) { background: color-mix(in srgb, CanvasText 7%, transparent); }
+.coordinator button:disabled { cursor: default; opacity: .45; }
 .commands { display: grid; gap: 4px; margin-top: 8px; padding: 9px 10px; border-radius: 10px; background: color-mix(in srgb, CanvasText 5%, transparent); font-size: 11px; }
 .commands b { font-size: 12px; }
 .commands span { opacity: .7; }
@@ -33,7 +46,10 @@
 .task[data-phase='failed'] > i, .task[data-phase='cancelled'] > i { background: #d14343; box-shadow: 0 0 0 3px rgba(209,67,67,.12); }
 .hint { margin-top: 8px; font-size: 11px; opacity: .62; }
 .error { margin-top: 8px; font-size: 11px; color: #d14343; }
-.panel .button { width: 26px; height: 26px; border: 0; color: CanvasText; background: transparent; box-shadow: none; }
 @keyframes pulse { from { transform: scale(.92); opacity: .9 } to { transform: scale(1.35); opacity: 0 } }
 @media (prefers-reduced-motion: reduce) { .button, .pulse { transition: none; animation: none; } }
-@media (max-width: 720px) { .root { right: 14px; bottom: 14px; } }
+@media (max-width: 720px) {
+  .root { right: 14px; bottom: 14px; }
+  .root[data-open='true'] { width: 100vw; }
+  .panel { padding-inline: 14px; }
+}

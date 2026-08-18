@@ -1,0 +1,41 @@
+  getCoordinatorBinding() {
+    return readDshCoordinatorBinding()
+  }
+
+  async rebindCoordinatorSession(ownerId, { sessionId, cwd }) {
+    const key = coordinatorKey(ownerId, this.protocol)
+    return this.serialize(`coordinator:${key}`, async () => {
+      const previous = readDshCoordinatorBinding()
+      const next = { sessionId: clean(sessionId), cwd: clean(cwd) }
+      if (!/^session-[0-9a-f-]{36}$/i.test(next.sessionId) || !next.cwd) {
+        throw new AgentError('Invalid DSH Coordinator identity', {
+          status: 400,
+          protocol: this.protocol,
+        })
+      }
+      this.coordinatorSessions.delete(key)
+      this.coordinatorSessionPromises.delete(key)
+      this.registry.set(key, next)
+      writeDshCoordinatorBinding(next)
+      try {
+        const session = await this.ensureCoordinatorSession(ownerId)
+        return {
+          status: previous?.sessionId === next.sessionId ? 'verified' : 'rebound',
+          sessionId: session.sessionId,
+          cwd: session.cwd || next.cwd,
+          previousSessionId: previous?.sessionId || null,
+        }
+      } catch (error) {
+        this.coordinatorSessions.delete(key)
+        this.coordinatorSessionPromises.delete(key)
+        if (previous) {
+          this.registry.set(key, previous)
+          writeDshCoordinatorBinding(previous)
+        } else {
+          this.registry.delete(key)
+          clearDshCoordinatorBinding()
+        }
+        throw error
+      }
+    })
+  }

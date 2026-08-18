@@ -62,15 +62,18 @@ Qwen 或 DashScope 凭证只保存在 Qwen Audio Agent 的本地配置中。仓�
 
 ## 临时兼容补丁
 
-`pnpm setup:qwen` 会对全局安装的 Qwen Audio Agent `1.10.0` 应用三个带版本
-检查的小型兼容修改：
+`pnpm setup:qwen` 会对全局安装的 Qwen Audio Agent `1.10.0` 应用带版本检查的
+兼容修改：
 
 - 为同时发出的语音任务建立独立的协调通道；
-- 为每个工作任务建立独立的 ACP 协调会话；
+- 每个认证用户只保留一个长期 ACP Coordinator Session；
 - 允许管理员明确配置的 DSH 本机回环地址跨端口访问 Gateway。
+- 安装带鉴权的本地 DSH Session API，并接入 Task Manager 生命周期；
+- 在任务快照中保留目标 Session 身份；
+- 存在旧的“继续时直接选第一个 Session”分支时将其禁用。
 
 脚本遇到未知版本时会拒绝修改，并且可以安全地重复运行。重新安装 Qwen Audio
-Agent 会移除这些临时修改。
+Agent 会移除这些临时修改；之后重新执行 `pnpm setup:qwen` 即可恢复完整接线。
 
 ## 开发与验证
 
@@ -109,3 +112,10 @@ ACP 桥接只允许访问本机回环地址。悬浮语音客户端默认连接
 本项目采用 MIT 许可证。改编的 Qwen Audio Agent 音频传输逻辑记录在 `NOTICE`
 中；Qwen Audio Agent 采用 Apache-2.0 许可证。重新分发本集成时，请保留相关
 上游署名。
+# 协调会话绑定
+
+语音悬浮面板会显示当前 Coordinator。首次使用时，在目标 DSH 会话中点击
+“设为协调会话”；需要更换时，在新会话中点击“由当前会话接管”并确认。
+Session ID 由 DSH 当前会话状态提供并由 Gateway 再次验证，用户无需复制或编辑。
+
+本地 `rebind-coordinator` 命令仅作为网页不可用时的灾难恢复手段。
