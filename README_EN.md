@@ -25,6 +25,26 @@ show live task state, interrupt playback, and announce results as tasks finish.
 This is a community integration, not an official DeepSeek or Qwen release.
 Both upstream projects are evolving quickly, so exact versions matter.
 
+## Current support scope
+
+The realtime voice frontend and the backend task Agent are separate layers.
+This release supports:
+
+- DashScope `Qwen-Audio-Realtime`: `qwen-audio-3.0-realtime-plus` (default),
+  `qwen-audio-3.0-realtime-flash`, `qwen3.5-omni-flash-realtime`, and
+  `qwen3.5-omni-plus-realtime`;
+- the optional local Hugging Face `speech-to-speech` frontend provided by
+  upstream Qwen Audio Agent;
+- DeepSeek Harness Web `0.1.0-rc.6` as the backend task Agent through this
+  project's ACP bridge.
+
+This release does **not** directly support Doubao end-to-end Realtime, OpenAI
+Realtime, Gemini Live, or other cloud realtime providers not registered by
+upstream Qwen Audio Agent. Backend model-provider support does not imply
+realtime voice-provider support. A local experimental branch previously ran
+Doubao through an additional bridge, but that bridge and its task-routing
+layer are not part of this release.
+
 ## Install
 
 ```powershell
@@ -41,13 +61,15 @@ pnpm start
 
 Restart DSH Web and open `http://127.0.0.1:3080`.
 
-Qwen/DashScope credentials remain in Qwen Audio Agent configuration. No API
-key is included in this repository or sent through the DSH browser bundle.
+The default voice frontend requires a user-provided DashScope API key. When
+using local `speech-to-speech`, configure its endpoint as documented upstream.
+Credentials remain in local Qwen Audio Agent configuration. No API key is
+included in this repository or sent through the DSH browser bundle.
 
 ## What the compatibility patch changes
 
-`pnpm setup:qwen` applies version-checked integration changes to the globally
-installed Qwen Audio Agent 1.10.0:
+`pnpm setup:qwen` applies version-checked integration changes only to the
+Qwen Audio Agent 1.10.0 runtime bundled inside this project:
 
 - separate coordinator lanes for simultaneous voice turns;
 - keep one persistent ACP Coordinator Session per authenticated owner;
@@ -78,6 +100,8 @@ the local gateway at `127.0.0.1:3101`.
 ## Known limitations
 
 - Developer-preview compatibility is pinned to DSH `0.1.0-rc.6`.
+- The only verified cloud realtime voice frontend is DashScope Qwen Realtime;
+  Doubao end-to-end Realtime is not included in this release.
 - The Qwen compatibility patch is temporary and should eventually be replaced
   by upstream extension points.
 - Session titles are generated from the spoken task objective and may still

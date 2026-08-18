@@ -37,6 +37,24 @@ DSH 会话，并在悬浮面板中查看任务状态。
 迭代。项目已经内置并锁定经过验证的 Qwen Audio Agent Runtime，用户不需要
 另外安装、升级或选择 Qwen Audio Agent 版本。
 
+## 当前支持范围
+
+本项目把“实时语音前台”和“后台任务 Agent”分开处理。目前正式支持：
+
+- 实时语音前台：DashScope `Qwen-Audio-Realtime`，包括
+  `qwen-audio-3.0-realtime-plus`（默认）、
+  `qwen-audio-3.0-realtime-flash`、`qwen3.5-omni-flash-realtime` 和
+  `qwen3.5-omni-plus-realtime`；
+- 可选实时语音前台：Qwen Audio Agent 上游提供的 Hugging Face
+  `speech-to-speech` 本地前台；
+- 后台任务 Agent：DeepSeek Harness Web `0.1.0-rc.6`，通过本项目的 ACP
+  Bridge 创建、继续、查询和取消 DSH 会话任务。
+
+当前**不支持**直接使用豆包端到端 Realtime、OpenAI Realtime、Gemini Live
+或其他未在上游注册的云端实时语音 Provider。后台 Agent 支持某个模型供应商，
+不代表实时语音前台也支持该供应商。豆包曾在本机实验分支中通过额外 Bridge
+运行，但该实现及其任务路由层尚未纳入当前发布版，因此 README 不将其列为支持项。
+
 ## 安装
 
 ```powershell
@@ -63,8 +81,9 @@ $env:ACP_WORKSPACE = 'C:\path\to\workspace'
 pnpm start
 ```
 
-Qwen 或 DashScope 凭证只保存在 Qwen Audio Agent 的本地配置中。仓库和 DSH
-浏览器插件包均不包含 API Key。
+默认语音前台需要用户自行配置 DashScope API Key；使用本地
+`speech-to-speech` 时按其上游文档配置服务地址。凭证只保存在 Qwen Audio
+Agent 的本地配置中，仓库和 DSH 浏览器插件包均不包含 API Key。
 
 ## 临时兼容补丁
 
@@ -95,6 +114,8 @@ ACP 桥接只允许访问本机回环地址。悬浮语音客户端默认连接
 ## 已知限制
 
 - 当前开发预览版只验证了 DSH `0.1.0-rc.6`；
+- 云端实时语音前台当前只验证了 DashScope Qwen Realtime；豆包端到端
+  Realtime 尚未包含在发布版中；
 - Qwen 兼容补丁是临时方案，后续应尽量替换为上游正式扩展接口；
 - 会话名称根据语音任务目标生成，表达含糊时可能仍需手动重命名。
 
