@@ -50,10 +50,9 @@ DSH 会话，并在悬浮面板中查看任务状态。
 - 后台任务 Agent：DeepSeek Harness Web `0.1.0-rc.6`，通过本项目的 ACP
   Bridge 创建、继续、查询和取消 DSH 会话任务。
 
-当前**不支持**直接使用豆包端到端 Realtime、OpenAI Realtime、Gemini Live
-或其他未在上游注册的云端实时语音 Provider。后台 Agent 支持某个模型供应商，
-不代表实时语音前台也支持该供应商。豆包曾在本机实验分支中通过额外 Bridge
-运行，但该实现及其任务路由层尚未纳入当前发布版，因此 README 不将其列为支持项。
+当前**不支持**直接使用 OpenAI Realtime、Gemini Live 或其他未在上游注册的
+云端实时语音 Provider。后台 Agent 支持某个模型供应商，不代表实时语音前台
+也支持该供应商。
 
 ## 安装
 
@@ -114,8 +113,7 @@ ACP 桥接只允许访问本机回环地址。悬浮语音客户端默认连接
 ## 已知限制
 
 - 当前开发预览版只验证了 DSH `0.1.0-rc.6`；
-- 云端实时语音前台当前只验证了 DashScope Qwen Realtime；豆包端到端
-  Realtime 尚未包含在发布版中；
+- 云端实时语音前台当前只验证了 DashScope Qwen Realtime；
 - Qwen 兼容补丁是临时方案，后续应尽量替换为上游正式扩展接口；
 - 会话名称根据语音任务目标生成，表达含糊时可能仍需手动重命名。
 

@@ -38,12 +38,9 @@ This release supports:
 - DeepSeek Harness Web `0.1.0-rc.6` as the backend task Agent through this
   project's ACP bridge.
 
-This release does **not** directly support Doubao end-to-end Realtime, OpenAI
-Realtime, Gemini Live, or other cloud realtime providers not registered by
-upstream Qwen Audio Agent. Backend model-provider support does not imply
-realtime voice-provider support. A local experimental branch previously ran
-Doubao through an additional bridge, but that bridge and its task-routing
-layer are not part of this release.
+This release does **not** directly support OpenAI Realtime, Gemini Live, or
+other cloud realtime providers not registered by upstream Qwen Audio Agent.
+Backend model-provider support does not imply realtime voice-provider support.
 
 ## Install
 
@@ -100,8 +97,7 @@ the local gateway at `127.0.0.1:3101`.
 ## Known limitations
 
 - Developer-preview compatibility is pinned to DSH `0.1.0-rc.6`.
-- The only verified cloud realtime voice frontend is DashScope Qwen Realtime;
-  Doubao end-to-end Realtime is not included in this release.
+- The only verified cloud realtime voice frontend is DashScope Qwen Realtime.
 - The Qwen compatibility patch is temporary and should eventually be replaced
   by upstream extension points.
 - Session titles are generated from the spoken task objective and may still
