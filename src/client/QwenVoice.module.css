@@ -7,6 +7,9 @@
 .button[data-active='true'] { color: white; background: linear-gradient(135deg,#7357ff,#2e9bff); box-shadow: 0 0 0 4px rgba(101,91,255,.14); }
 .button[data-state='speaking'] { background: linear-gradient(135deg,#16a085,#2ecc71); }
 .button[data-error='true'] { color: white; background: #d14343; }
+.sidebarHandle { position: fixed; top: 50%; right: 0; z-index: 4; width: 28px; height: 58px; padding: 0; border: 1px solid color-mix(in srgb, CanvasText 14%, transparent); border-right: 0; border-radius: 12px 0 0 12px; display: grid; place-items: center; color: CanvasText; background: color-mix(in srgb, Canvas 96%, transparent); box-shadow: -6px 0 18px rgba(0,0,0,.12); cursor: pointer; transform: translateY(-50%); backdrop-filter: blur(14px); }
+.sidebarHandle:hover { width: 32px; background: color-mix(in srgb, CanvasText 7%, Canvas); }
+.sidebarHandle:focus-visible { outline: 2px solid #6d5dfc; outline-offset: 2px; }
 .pulse { position: absolute; right: -3px; bottom: -3px; z-index: 2; width: 62px; height: 62px; border: 1px solid rgba(101,91,255,.45); border-radius: 999px; pointer-events: none; animation: pulse 1.5s ease-out infinite; }
 .root[data-open='true'] .pulse { right: 15px; bottom: 15px; }
 .panel { box-sizing: border-box; position: absolute; inset: 0; overflow: auto; padding: 16px 16px 92px; border: 0; border-left: 1px solid color-mix(in srgb, CanvasText 12%, transparent); border-radius: 0; background: color-mix(in srgb, Canvas 97%, transparent); color: CanvasText; box-shadow: -12px 0 34px rgba(0,0,0,.12); backdrop-filter: blur(18px); }
@@ -21,6 +24,16 @@
 .closeButton:hover { background: color-mix(in srgb, CanvasText 7%, transparent); }
 .closeButton:focus-visible { outline: 2px solid #6d5dfc; outline-offset: 2px; }
 .transcript { margin: 10px 0 0; min-height: 38px; font-size: 13px; line-height: 1.55; color: color-mix(in srgb, CanvasText 84%, transparent); }
+.timeline { min-height: 112px; max-height: min(34vh, 290px); margin-top: 10px; padding: 8px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; border: 1px solid color-mix(in srgb, CanvasText 9%, transparent); border-radius: 12px; background: color-mix(in srgb, CanvasText 2.5%, transparent); scrollbar-width: thin; }
+.timeline .transcript { margin: 0; padding: 4px; }
+.message { display: grid; width: fit-content; max-width: 88%; gap: 3px; margin: 0 0 8px; padding: 8px 10px; border-radius: 11px; background: color-mix(in srgb, CanvasText 7%, Canvas); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.message:last-child { margin-bottom: 0; }
+.message[data-role='user'] { margin-left: auto; background: color-mix(in srgb, #6657ee 18%, Canvas); }
+.message small { font-size: 9px; font-weight: 600; opacity: .55; }
+.message b { font-size: 11px; }
+.message p { margin: 0; white-space: pre-wrap; }
+.message em { font-size: 9px; font-style: normal; opacity: .5; }
+.message[data-live='true']::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #6d5dfc; animation: pulse 1.2s ease-out infinite; }
 .coordinator { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 9px 10px; border: 1px solid color-mix(in srgb, CanvasText 10%, transparent); border-radius: 10px; }
 .coordinator > span { display: grid; min-width: 0; gap: 2px; }
 .coordinator b { font-size: 12px; }

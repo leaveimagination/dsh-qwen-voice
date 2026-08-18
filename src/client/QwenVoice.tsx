@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { decodePcm, pcmBase64, resample } from './audio.ts'
+import {
+  discardUserTranscript,
+  upsertAssistantTranscript,
+  upsertUserTranscript,
+  type VoiceMessage,
+} from './message-order.ts'
 import css from './QwenVoice.module.css'
 
 type VoiceProps = PropsRuntime<'shell.overlay'> & {
@@ -29,6 +35,19 @@ interface GatewayEvent {
   inputSampleRate?: number
   message?: string
   responseId?: string
+  turnId?: string
+  taskId?: string
+  taskIds?: string[]
+  origin?: string
+  deliverySequence?: number
+  replace?: boolean
+  item?: {
+    id?: string
+    content?: string
+    title?: string
+    turnId?: string
+    taskId?: string
+  }
   task?: GatewayTask
 }
 
@@ -105,6 +124,7 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
   const [connected, setConnected] = useState(false)
   const [state, setState] = useState<VoiceState>('idle')
   const [transcript, setTranscript] = useState('点击麦克风，然后直接说出任务。')
+  const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [error, setError] = useState('')
   const [tasks, setTasks] = useState<TaskView[]>([])
   const [coordinatorBinding, setCoordinatorBinding] = useState<CoordinatorBinding | null>(null)
@@ -116,10 +136,11 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
   const playbackEndTimersRef = useRef(new Map<string, number>())
   const playbackSourcesRef = useRef(new Set<AudioBufferSourceNode>())
   const activeResponseIdRef = useRef('')
+  const messagesRef = useRef<HTMLDivElement | null>(null)
+  const stickToBottomRef = useRef(true)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
 
   const toggle = useCallback((): void => {
-    setOpen(true)
     setError('')
     setEnabled(value => !value)
   }, [])
@@ -127,6 +148,11 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
   useEffect(() => {
     localStorage.setItem('dsh-qwen-voice.sidebar-open', String(open))
   }, [open])
+
+  useLayoutEffect(() => {
+    const container = messagesRef.current
+    if (container && stickToBottomRef.current) container.scrollTop = container.scrollHeight
+  }, [messages])
 
   useEffect(() => {
     const button = buttonRef.current
@@ -305,7 +331,51 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
           setState(event.state as VoiceState)
         }
         if ((event.type === 'transcript.delta' || event.type === 'transcript.final') && event.role === 'user') {
+          const id = event.turnId ? `user:${event.turnId}` : crypto.randomUUID()
+          setMessages(items => upsertUserTranscript(items, {
+            id,
+            content: event.content || '',
+            turnId: event.turnId,
+            final: event.type === 'transcript.final',
+          }))
           setTranscript(event.content || '')
+        }
+        if ((event.type === 'transcript.delta' || event.type === 'transcript.final') && event.role === 'assistant') {
+          const responseId = event.responseId || activeResponseIdRef.current
+          if (responseId) {
+            const final = event.type === 'transcript.final'
+            const message: VoiceMessage = {
+              id: `voice:${responseId}`,
+              role: 'assistant',
+              content: event.content || '',
+              responseId,
+              turnId: event.turnId,
+              taskId: event.taskId,
+              taskIds: event.taskIds,
+              origin: event.origin,
+              deliverySequence: event.deliverySequence,
+              final,
+              live: !final,
+            }
+            setMessages(items => upsertAssistantTranscript(items, message, final || Boolean(event.replace)))
+            setTranscript(event.content || '')
+          }
+        }
+        if (event.type === 'transcript.discard' && event.role === 'user') {
+          setMessages(items => discardUserTranscript(items, event.turnId))
+        }
+        if (event.type === 'timeline.inline' && event.item?.content) {
+          const item = event.item
+          setMessages(items => upsertAssistantTranscript(items, {
+            id: `inline:${item.id || item.taskId || crypto.randomUUID()}`,
+            role: 'assistant',
+            content: item.content || '',
+            title: item.title,
+            turnId: item.turnId,
+            taskId: item.taskId,
+            final: true,
+            live: false,
+          }, true))
         }
         updateTask(event)
         if (event.type === 'error') setError(event.message || 'Qwen 语音服务返回错误')
@@ -355,6 +425,12 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
           playbackEndTimersRef.current.set(responseId, timer)
         }
         if (event.type === 'response.interrupted' || event.type === 'playback.clear') {
+          if (event.type === 'response.interrupted' && event.responseId) {
+            const id = `voice:${event.responseId}`
+            setMessages(items => items.map(item => (
+              item.id === id ? { ...item, interrupted: true, live: false } : item
+            )))
+          }
           stopPlayback()
           activeResponseIdRef.current = ''
         }
@@ -454,6 +530,17 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
           <path fill="currentColor" d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Zm-1.8-9.5a1.8 1.8 0 1 1 3.6 0v6a1.8 1.8 0 1 1-3.6 0V6Zm7.8 5.4a.85.85 0 0 1 .85.85 6.85 6.85 0 0 1-6 6.8v2.1h2.4a.85.85 0 1 1 0 1.7h-6.5a.85.85 0 1 1 0-1.7h2.4v-2.1a6.85 6.85 0 0 1-6-6.8.85.85 0 1 1 1.7 0 5.15 5.15 0 0 0 10.3 0 .85.85 0 0 1 .85-.85Z" />
         </svg>
       </button>
+      {!open && (
+        <button
+          type="button"
+          className={css.sidebarHandle}
+          aria-label="展开 Qwen 语音侧边栏"
+          title="展开语音侧边栏"
+          onClick={() => setOpen(true)}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><path fill="currentColor" d="m9.3 6.3 5 5a1 1 0 0 1 0 1.4l-5 5-1.4-1.4 4.3-4.3-4.3-4.3 1.4-1.4Z" /></svg>
+        </button>
+      )}
       {open && (
         <section className={css.panel} aria-live="polite">
           <div className={css.head}>
@@ -462,7 +549,33 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><path fill="currentColor" d="m14.7 6.3-5 5a1 1 0 0 0 0 1.4l5 5 1.4-1.4-4.3-4.3 4.3-4.3-1.4-1.4Z" /></svg>
             </button>
           </div>
-          <p className={css.transcript}>{transcript}</p>
+          <div
+            ref={messagesRef}
+            className={css.timeline}
+            aria-label="语音对话记录"
+            onScroll={event => {
+              const container = event.currentTarget
+              stickToBottomRef.current = (
+                container.scrollHeight - container.scrollTop - container.clientHeight < 36
+              )
+            }}
+          >
+            {messages.length === 0
+              ? <p className={css.transcript}>{transcript}</p>
+              : messages.map(message => (
+                  <article
+                    className={css.message}
+                    data-role={message.role}
+                    data-live={message.live || undefined}
+                    key={message.id}
+                  >
+                    <small>{message.role === 'user' ? '你' : message.origin === 'announcement' ? '任务播报' : 'Qwen'}</small>
+                    {message.title && <b>{message.title}</b>}
+                    <p>{message.content || (message.live ? '…' : '')}</p>
+                    {message.interrupted && <em>已中断</em>}
+                  </article>
+                ))}
+          </div>
           <div className={css.coordinator}>
             <span>
               <b>协调会话</b>

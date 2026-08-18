@@ -2,16 +2,15 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-const globalRoot = execFileSync(npmCommand, ['root', '--global'], {
-  encoding: 'utf8',
-  shell: process.platform === 'win32',
-}).trim()
-const root = path.join(globalRoot, 'qwen-audio-agent')
+const root = path.resolve(here, '..', 'node_modules', 'qwen-audio-agent')
+if (!fs.existsSync(path.join(root, 'package.json'))) {
+  throw new Error(
+    'Bundled Qwen Audio Agent is missing. Run `pnpm install` in the plugin directory first.',
+  )
+}
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 if (pkg.version !== '1.10.0') {
   throw new Error(`Expected qwen-audio-agent 1.10.0, found ${pkg.version}.`)
@@ -62,6 +61,234 @@ replaceOnce(
   'laneKey: `coordinator:${this.ownerId}`',
   'laneKey: `coordinator:${this.ownerId}:${this.sessionId}:${turnId}`',
   'laneKey: `coordinator:${this.ownerId}:${this.sessionId}:${turnId}`',
+)
+
+// DSH-managed delegations are persisted by TaskManager and may not exist in
+// ACP Adapter's process-local delegatedWorkRuns map. Pass the durable record
+// into status queries so an in-memory cache miss is not reported as absence.
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `              {
+                ownerId: this.ownerId,
+                signal,
+              },
+            )`,
+  `              {
+                ownerId: this.ownerId,
+                signal,
+                delegation: (() => {
+                  const externalWorkId = task.delegation?.externalWorkId
+                  const child = externalWorkId
+                    ? this.taskManager.get(externalWorkId, { ownerId: this.ownerId })
+                    : null
+                  return child?.delegation || task.delegation || null
+                })(),
+              },
+            )`,
+  'child?.delegation || task.delegation || null',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `            throw error
+          }
+        },`,
+  `            return {
+              content: [
+                '当前无法确认这项后台工作的实时状态。',
+                '这不代表任务不存在，也不代表任务失败。',
+                '不要重新创建或重新执行该任务；请稍后重试状态查询。',
+              ].join(''),
+              metadata: {
+                parentWorkId: task.id,
+                status: 'lookup_unavailable',
+                authoritative: false,
+                retryable: true,
+                prohibitRestart: true,
+                cause: String(error?.message || error || 'unknown error'),
+              },
+            }
+          }
+        },`,
+  "status: 'lookup_unavailable'",
+)
+
+replaceOnce(
+  'server/src/agent/acp-backend-adapter.mjs',
+  `  async queryDelegatedWork(workId, question, { ownerId, signal } = {}) {
+    const run = this.delegatedWorkRuns.get(clean(workId))
+    const record = run?.delegation
+    if (!record || record.ownerId !== clean(ownerId)) {
+      throw new AgentError(\`没有找到对应的 ${'${this.label}'} 项目任务\`, {
+        protocol: this.protocol,
+      })
+    }`,
+  `  async queryDelegatedWork(workId, question, {
+    ownerId,
+    signal,
+    delegation: persistedDelegation,
+  } = {}) {
+    const run = this.delegatedWorkRuns.get(clean(workId))
+    let record = run?.delegation
+    if (!record && clean(persistedDelegation?.id) && clean(persistedDelegation?.sessionId)) {
+      record = {
+        ...persistedDelegation,
+        id: clean(persistedDelegation.id),
+        sessionId: clean(persistedDelegation.sessionId),
+        ownerId: clean(ownerId),
+        workId: clean(workId),
+        recoveredFromLedger: true,
+      }
+    }
+    if (!record || record.ownerId !== clean(ownerId)) {
+      throw new AgentError(\`TASK_LOOKUP_UNAVAILABLE: cannot resolve ${'${this.label}'} delegation\`, {
+        protocol: this.protocol,
+      })
+    }`,
+  'recoveredFromLedger: true',
+)
+
+// A status lookup that cannot establish the truth must never be converted by
+// the Realtime model into a replacement task in the same voice turn.
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `    this.turnTasks = new Map()
+    this.deferredToolResponses = new Map()`,
+  `    this.turnTasks = new Map()
+    this.restartProhibitedTurns = new Set()
+    this.deferredToolResponses = new Map()`,
+  'this.restartProhibitedTurns = new Set()',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `    const pendingPermissionTask = this.taskManager.list({`,
+  `    if (this.restartProhibitedTurns.has(turnId)) {
+      await this.sendOutput(
+        callId,
+        failure(
+          'task_restart_prohibited',
+          '刚才的状态查询无法确认结果。本轮禁止重新创建或重新执行该任务，请稍后重新查询状态。',
+          {
+            retryable: false,
+            status: 'lookup_unavailable',
+            prohibit_restart: true,
+          },
+        ),
+        turnId,
+        null,
+        {
+          response: {
+            instructions: '状态未知不等于任务不存在。本轮不要再次调用后台任务工具，也不要声称已经重新发起任务。',
+          },
+        },
+      )
+      return
+    }
+
+    const pendingPermissionTask = this.taskManager.list({`,
+  "'task_restart_prohibited'",
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `            return {
+              content: [
+                '当前无法确认这项后台工作的实时状态。',`,
+  `            this.restartProhibitedTurns.add(turnId)
+            while (this.restartProhibitedTurns.size > 100) {
+              this.restartProhibitedTurns.delete(
+                this.restartProhibitedTurns.values().next().value,
+              )
+            }
+            return {
+              content: [
+                '当前无法确认这项后台工作的实时状态。',`,
+  'while (this.restartProhibitedTurns.size > 100)',
+)
+
+// Child work created by the fixed DSH Coordinator mirrors the outer voice
+// work. Keep it addressable by ID, but never count it as a second user task.
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `      const tasks = this.taskManager.list({
+        ownerId: this.ownerId,
+        sessionId: this.sessionId,
+      }).slice(0, 20).map(task => ({`,
+  `      const tasks = this.taskManager.list({
+        ownerId: this.ownerId,
+        sessionId: this.sessionId,
+      }).filter(task => !task.parentWorkId).slice(0, 20).map(task => ({`,
+  'filter(task => !task.parentWorkId).slice(0, 20)',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `    const targetId = requestedId || this.taskManager.list({
+      ownerId: this.ownerId,
+      sessionId: this.sessionId,
+    }).find(task => [
+      'scheduled',
+      'queued',
+      'running',
+      'delegated',
+      'finalizing',
+    ].includes(task.status))?.id`,
+  `    const targetId = requestedId || this.taskManager.list({
+      ownerId: this.ownerId,
+      sessionId: this.sessionId,
+    }).find(task => (
+      !task.parentWorkId
+      && [
+        'scheduled',
+        'queued',
+        'running',
+        'delegated',
+        'finalizing',
+      ].includes(task.status)
+    ))?.id`,
+  '!task.parentWorkId\n      && [',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `      : this.taskManager.list({
+          ownerId: this.ownerId,
+          sessionId: this.sessionId,
+        })[0]`,
+  `      : this.taskManager.list({
+          ownerId: this.ownerId,
+          sessionId: this.sessionId,
+        }).find(item => !item.parentWorkId)`,
+  '.find(item => !item.parentWorkId)',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `      const active = this.taskManager.list({
+        ownerId: this.ownerId,
+      }).find(task => [
+        'scheduled',
+        'queued',
+        'running',
+        'delegated',
+        'finalizing',
+      ].includes(task.status))`,
+  `      // Redirect only the user-visible outer work, never its mirrored child.
+      const active = this.taskManager.list({
+        ownerId: this.ownerId,
+      }).find(task => (
+        !task.parentWorkId
+        && [
+          'scheduled',
+          'queued',
+          'running',
+          'delegated',
+          'finalizing',
+        ].includes(task.status)
+      ))`,
+  'Redirect only the user-visible outer work',
+  { optional: true },
 )
 
 // Older local builds created one Coordinator per work item. Collapse that

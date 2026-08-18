@@ -1,0 +1,43 @@
+name: Clean install
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+
+      - name: Install pnpm
+        run: npm install --global pnpm@11.19.0
+
+      - name: Install from lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Patch bundled Qwen runtime
+        run: pnpm setup:qwen
+
+      - name: Verify patch is repeatable
+        run: pnpm setup:qwen
+
+      - name: Install ACP bridge
+        run: pnpm --dir bridge install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test ACP bridge
+        run: pnpm --dir bridge test
+
+      - name: Verify bundled CLI
+        run: node scripts/start.mjs --help

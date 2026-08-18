@@ -2,7 +2,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { QwenVoice } from './QwenVoice.tsx'
 
-export const inject = ['slots']
+export const inject = ['slots', 'sessions']
 
 type RefreshableSessions = ClientContext['sessions'] & {
   refresh(): Promise<void>

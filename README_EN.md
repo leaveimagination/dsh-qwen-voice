@@ -28,20 +28,15 @@ Both upstream projects are evolving quickly, so exact versions matter.
 ## Install
 
 ```powershell
-npm.cmd install --global qwen-audio-agent@1.10.0
 pnpm install
-pnpm typecheck
-pnpm build
-pnpm setup:qwen
-pnpm --dir bridge install
-npx.cmd -p @deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add .
+pnpm setup
 ```
 
 Copy `start-qwen-dsh-voice.example.cmd` to a local filename, adjust
 `ACP_WORKSPACE` if needed, then start the gateway:
 
 ```powershell
-.\start-qwen-dsh-voice.example.cmd webui
+pnpm start
 ```
 
 Restart DSH Web and open `http://127.0.0.1:3080`.

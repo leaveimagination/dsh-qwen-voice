@@ -26,44 +26,50 @@ DSH 会话，并在悬浮面板中查看任务状态。
 - 通过播放状态回执减少重复播报；
 - 根据任务目标生成更容易识别的侧边栏会话名称。
 
-## 兼容版本
+## 运行环境
 
 - DeepSeek Harness Web `0.1.0-rc.6`
-- Qwen Audio Agent `1.10.0`
-- 同时满足两个上游项目要求的 Node.js 版本
+- Node.js `22.22.2+`、`24.15.0+` 或 `26+`
+- npm `10+` 与 pnpm
 - 提供 Windows 启动脚本；插件和 ACP 桥接本身使用跨平台 Node.js
 
 本项目是社区集成，不是 DeepSeek 或 Qwen 的官方版本。两个上游项目仍在快速
-迭代，因此目前需要严格匹配上述版本。
+迭代。项目已经内置并锁定经过验证的 Qwen Audio Agent Runtime，用户不需要
+另外安装、升级或选择 Qwen Audio Agent 版本。
 
 ## 安装
 
 ```powershell
-npm.cmd install --global qwen-audio-agent@1.10.0
 pnpm install
-pnpm typecheck
-pnpm build
-pnpm setup:qwen
-pnpm --dir bridge install
-npx.cmd -p @deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add .
+pnpm setup
 ```
 
-复制 `start-qwen-dsh-voice.example.cmd`，保存为你自己的本地启动脚本。
-如果需要，请修改其中的 `ACP_WORKSPACE`，然后启动语音 Gateway：
+安装完成后启动整个语音 Runtime、Gateway 和 ACP Bridge（前台运行，按
+`Ctrl+C` 停止）：
 
 ```powershell
-.\start-qwen-dsh-voice.example.cmd webui
+pnpm start
 ```
 
 重启 DSH Web，并打开 `http://127.0.0.1:3080`。
+
+仓库的 GitHub Actions 会在全新的 Windows Runner 上重复执行依赖安装、补丁、
+类型检查、构建、Bridge 测试和本地 CLI 检查，不需要准备第二台电脑。
+
+默认把启动命令所在目录作为 ACP 工作区。需要指定工作区时：
+
+```powershell
+$env:ACP_WORKSPACE = 'C:\path\to\workspace'
+pnpm start
+```
 
 Qwen 或 DashScope 凭证只保存在 Qwen Audio Agent 的本地配置中。仓库和 DSH
 浏览器插件包均不包含 API Key。
 
 ## 临时兼容补丁
 
-`pnpm setup:qwen` 会对全局安装的 Qwen Audio Agent `1.10.0` 应用带版本检查的
-兼容修改：
+`pnpm setup` 会对本项目内部锁定的 Qwen Runtime 应用带版本检查的兼容修改，
+不会查询或修改电脑上的全局 Qwen Audio Agent：
 
 - 为同时发出的语音任务建立独立的协调通道；
 - 每个认证用户只保留一个长期 ACP Coordinator Session；
@@ -72,8 +78,8 @@ Qwen 或 DashScope 凭证只保存在 Qwen Audio Agent 的本地配置中。仓�
 - 在任务快照中保留目标 Session 身份；
 - 存在旧的“继续时直接选第一个 Session”分支时将其禁用。
 
-脚本遇到未知版本时会拒绝修改，并且可以安全地重复运行。重新安装 Qwen Audio
-Agent 会移除这些临时修改；之后重新执行 `pnpm setup:qwen` 即可恢复完整接线。
+脚本遇到未知源码时会拒绝修改，并且可以安全地重复运行。重新安装项目依赖会
+还原内部 Runtime；之后重新执行 `pnpm setup` 即可恢复完整接线。
 
 ## 开发与验证
 
