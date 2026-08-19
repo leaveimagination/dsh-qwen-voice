@@ -76,7 +76,7 @@ const env = {
   AGENT_PROTOCOL: process.env.AGENT_PROTOCOL || 'acp',
   ACP_COMMAND: process.env.ACP_COMMAND || process.execPath,
   ACP_ARGS: process.env.ACP_ARGS || path.join(root, 'bridge', 'src', 'index.mjs'),
-  ACP_LABEL: process.env.ACP_LABEL || 'DSH Web',
+  ACP_LABEL: process.env.ACP_LABEL || 'DSH Desktop',
   ACP_WORKSPACE: process.env.ACP_WORKSPACE || process.cwd(),
   DSH_WEB_URL: bridgeUrl,
   ...(allowedOrigins
