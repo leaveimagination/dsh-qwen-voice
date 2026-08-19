@@ -149,6 +149,19 @@ Coordinator 会话调度到多个子会话并行执行；切换 Harness 会话�
 脚本遇到未知源码时会拒绝修改，并且可以安全地重复运行。重新安装项目依赖会
 还原内部 Runtime；之后重新执行 `pnpm setup` 即可恢复完整接线。
 
+## 仓库结构
+
+| 路径 | 作用 |
+| --- | --- |
+| `src/` | 语音悬浮球插件源码（DSH client 插件） |
+| `bridge/` | ACP Bridge：把 DSH Web 会话暴露为 ACP 后端 |
+| `tools/dsh-qwen-coordinator-tools/` | 协调会话工具插件（coordinator 专用 DSH 工具） |
+| `scripts/` | 安装/启动/兼容补丁脚本 |
+| `cordis.patch.yml` | 插件注册补丁 |
+
+`pnpm setup` 会构建并注册 `src/` 主插件和 `tools/` 协调工具插件到同一个
+DSH profile。
+
 ## 开发与验证
 
 ```powershell

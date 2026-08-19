@@ -149,6 +149,19 @@ The script refuses unknown Qwen Audio Agent versions and is safe to rerun.
 Reinstalling the upstream package removes the patch; run `pnpm setup:qwen`
 again afterward to restore the integration.
 
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/` | Voice orb plugin source (DSH client plugin) |
+| `bridge/` | ACP Bridge: exposes DSH Web sessions as an ACP backend |
+| `tools/dsh-qwen-coordinator-tools/` | Coordinator session tools plugin (coordinator-only DSH tools) |
+| `scripts/` | Install / start / compatibility patch scripts |
+| `cordis.patch.yml` | Plugin registration patch |
+
+`pnpm setup` builds and registers both the `src/` main plugin and the
+`tools/` coordinator tools plugin into the same DSH profile.
+
 ## Development
 
 ```powershell
