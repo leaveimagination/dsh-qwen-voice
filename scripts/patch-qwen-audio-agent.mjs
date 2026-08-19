@@ -384,16 +384,64 @@ replaceOnce(
   'requireAgent().runManagedProjectSession(action, input, options)',
 )
 
+replaceOnce(
+  'server/src/agent/acp-backend-adapter.mjs',
+  `    this.activeCoordinatorTurns = new Set()
+    this.delegatedWorkRuns = new Map()`,
+  `    this.activeCoordinatorTurns = new Set()
+    // Exposes only currently executing Coordinator turns to the trusted local
+    // DSH Session API so its tool call can attach the delegation to that run.
+    this.managedCoordinatorRuns = new Map()
+    this.delegatedWorkRuns = new Map()`,
+  'this.managedCoordinatorRuns = new Map()',
+)
+
+replaceOnce(
+  'server/src/agent/acp-backend-adapter.mjs',
+  `    this.activeCoordinatorTurns.add(session.sessionId)
+    try {`,
+  `    this.activeCoordinatorTurns.add(session.sessionId)
+    this.managedCoordinatorRuns.set(clean(coordinationRunId), run)
+    try {`,
+  'this.managedCoordinatorRuns.set(clean(coordinationRunId), run)',
+)
+
+replaceOnce(
+  'server/src/agent/acp-backend-adapter.mjs',
+  `    } finally {
+      this.activeCoordinatorTurns.delete(session.sessionId)`,
+  `    } finally {
+      if (this.managedCoordinatorRuns.get(clean(coordinationRunId)) === run) {
+        this.managedCoordinatorRuns.delete(clean(coordinationRunId))
+      }
+      this.activeCoordinatorTurns.delete(session.sessionId)`,
+  'this.managedCoordinatorRuns.delete(clean(coordinationRunId))',
+)
+
 const managedMethod = fs.readFileSync(
   path.join(here, 'overlays', 'managed-project-session-method.mjs.txt'),
   'utf8',
 ).replace(/\r\n/g, '\n')
-replaceOnce(
-  'server/src/agent/acp-backend-adapter.mjs',
-  '  coordinatorInstructions(message) {',
-  `${managedMethod}\n  coordinatorInstructions(message) {`,
-  'async runManagedProjectSession(action, input, {',
-)
+{
+  const relative = 'server/src/agent/acp-backend-adapter.mjs'
+  const start = '  /** Run a trusted local project-session operation through normal delegation events. */'
+  if (read(relative).includes(start)) {
+    replaceSection(
+      relative,
+      start,
+      '  coordinatorInstructions(message) {',
+      `${managedMethod}\n`,
+      'COORDINATOR_RUN_UNAVAILABLE: the active Coordinator turn cannot accept this delegation',
+    )
+  } else {
+    replaceOnce(
+      relative,
+      '  coordinatorInstructions(message) {',
+      `${managedMethod}\n  coordinatorInstructions(message) {`,
+      'COORDINATOR_RUN_UNAVAILABLE: the active Coordinator turn cannot accept this delegation',
+    )
+  }
+}
 
 {
   const relative = 'server/src/agent/acp-backend-adapter.mjs'

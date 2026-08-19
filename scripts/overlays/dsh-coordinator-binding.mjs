@@ -2,12 +2,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-export const DSH_COORDINATOR_BINDING_PATH = path.join(
-  os.homedir(),
-  '.config',
-  'qwaudio',
-  'dsh-coordinator.json',
-)
+export const DSH_COORDINATOR_BINDING_PATH = process.env.QWEN_COORDINATOR_BINDING_PATH
+  ? path.resolve(process.env.QWEN_COORDINATOR_BINDING_PATH)
+  : path.join(
+      process.env.QWAUDIO_CONFIG_DIR || path.join(os.homedir(), '.config', 'qwaudio'),
+      'dsh-coordinator.json',
+    )
 
 export function readDshCoordinatorBinding() {
   try {

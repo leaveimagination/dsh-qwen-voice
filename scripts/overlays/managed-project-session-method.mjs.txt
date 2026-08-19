@@ -3,63 +3,36 @@
     ownerId,
     coordinationRunId,
     cwd,
-    signal,
-    onEvent,
   } = {}) {
-    const run = {
-      ownerId: clean(ownerId),
-      coordinationRunId: clean(coordinationRunId),
-      cwd: clean(cwd) || this.directory,
-      onEvent,
-      delegation: null,
-      nativeToolCalls: new Map(),
-      toolCalls: new Map(),
-      initialPromptDone: true,
-      receivedUpdate: false,
+    const runId = clean(coordinationRunId)
+    const run = this.managedCoordinatorRuns.get(runId)
+    if (!run || run.ownerId !== clean(ownerId)) {
+      throw new AgentError(
+        'COORDINATOR_RUN_UNAVAILABLE: the active Coordinator turn cannot accept this delegation',
+        { status: 409, protocol: this.protocol },
+      )
     }
-    if (signal?.aborted) throw signal.reason || new Error('Task cancelled')
+    if (run.delegation) {
+      throw new AgentError(
+        'COORDINATOR_ALREADY_DELEGATED: this Coordinator turn already started a project Session',
+        { status: 409, protocol: this.protocol },
+      )
+    }
+    run.cwd = clean(cwd) || run.cwd || this.directory
     const started = action === 'start'
       ? await this.startProjectSession(run, input)
       : await this.continueProjectSession(run, input)
     const record = run.delegation
-    onEvent?.({
-      type: 'backend.delegated',
-      delegation: {
-        id: record.id,
-        sessionId: record.sessionId,
-        status: record.status,
-        title: record.title,
-        directory: record.directory,
-      },
-    })
-    const abort = () => {
-      void this.cancelDelegation({ delegation_id: record.id }).catch(() => {})
+    if (!record?.promise) {
+      throw new AgentError(
+        'DELEGATION_NOT_STARTED: DSH did not create a background Session run',
+        { status: 502, protocol: this.protocol },
+      )
     }
-    signal?.addEventListener('abort', abort, { once: true })
-    try {
-      const result = await record.promise
-      onEvent?.({
-        type: 'backend.delegation.completed',
-        delegation: {
-          id: record.id,
-          sessionId: record.sessionId,
-          status: 'completed',
-          title: record.title,
-          directory: record.directory,
-        },
-      })
-      return {
-        content: clean(result?.content),
-        metadata: {
-          delegation: started,
-          presentation: {
-            speech: clean(result?.content),
-            inline: null,
-          },
-        },
-      }
-    } finally {
-      signal?.removeEventListener('abort', abort)
+    // Do not await record.promise here. runCoordinator() owns that promise,
+    // finalizes the durable Coordinator turn, and emits completion events.
+    return {
+      content: '',
+      metadata: { delegation: started },
     }
   }
-

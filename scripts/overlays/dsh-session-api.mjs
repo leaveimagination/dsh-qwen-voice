@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto'
+import { timingSafeEqual } from 'node:crypto'
 
 const API_TOKEN = 'dsh-local-3cf6f8d1a4e74279b5377ad91804e945'
 const ACTIONS = new Set(['list', 'start', 'send', 'status', 'cancel'])
@@ -19,27 +19,6 @@ function pickTask(taskManager, ownerId, input = {}) {
 
 function terminal(status) {
   return ['completed', 'failed', 'cancelled'].includes(String(status || ''))
-}
-
-function waitForDispatch(taskManager, workId, ownerId, timeoutMs = 30_000) {
-  const current = taskManager.get(workId, { ownerId })
-  if (current?.status === 'delegated' || terminal(current?.status)) {
-    return Promise.resolve(current)
-  }
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      stop()
-      reject(new Error('Timed out while starting the target DSH Session'))
-    }, timeoutMs)
-    timer.unref?.()
-    const stop = taskManager.subscribe(event => {
-      if (event.task?.id !== workId) return
-      if (event.task.status !== 'delegated' && !terminal(event.task.status)) return
-      clearTimeout(timer)
-      stop()
-      resolve(event.task)
-    })
-  })
 }
 
 export function attachDshSessionApi(app, { agent, taskManager, personalOwnerId }) {
@@ -128,53 +107,34 @@ export function attachDshSessionApi(app, { agent, taskManager, personalOwnerId }
         })
       }
 
-      let workId = ''
-      const callId = String(req.body?.call_id || randomUUID())
-      const task = taskManager.create({
-        objective: String(input.prompt || '').trim(),
-        ownerId,
-        sessionId: coordinatorSessionId,
-        turnId: callId,
-        parentWorkId: String(input.parent_work_id || '').trim() || null,
-        submissionKey: `dsh:${coordinatorSessionId}:${callId}`,
-        laneKey: `dsh-project:${ownerId}`,
-        laneLimit: 4,
-        suppressNotification: true,
-        runner: (_objective, { onEvent, signal }) => agent.runManagedProjectSession(
-          action,
-          input,
-          {
-            ownerId,
-            coordinationRunId: workId,
-            cwd: String(req.body?.cwd || ''),
-            signal,
-            onEvent,
-          },
-        ),
-        canceler: async ({ abort }) => {
-          const result = await agent.cancelDelegatedWork(workId, {
-            ownerId,
-            direct: true,
-          })
-          abort()
-          return result
-        },
-      })
-      workId = task.id
-      const dispatched = await waitForDispatch(taskManager, task.id, ownerId)
-      if (dispatched.status !== 'delegated') {
-        return res.status(dispatched.status === 'failed' ? 502 : 409).json({
-          status: dispatched.status,
-          work_id: dispatched.id,
-          error: dispatched.error || null,
+      const workId = String(input.parent_work_id || '').trim()
+      const parent = taskManager.tasks?.get(workId)
+      if (!parent || parent.ownerId !== ownerId) {
+        return res.status(404).json({
+          status: 'error',
+          code: 'PARENT_WORK_NOT_FOUND',
+          message: 'The coordinator request_id does not identify an active top-level work item.',
         })
       }
-      return res.status(202).json({
+      if (parent.sessionId === coordinatorSessionId) {
+        return res.status(409).json({
+          status: 'error',
+          code: 'INVALID_COORDINATOR_TARGET',
+          message: 'The Coordinator Session cannot be used as its own target Session.',
+        })
+      }
+      const result = await agent.runManagedProjectSession(action, input, {
+        ownerId,
+        coordinationRunId: workId,
+        cwd: String(req.body?.cwd || ''),
+      })
+      const delegation = result?.metadata?.delegation || {}
+      return res.json({
         status: 'started',
-        work_id: dispatched.id,
-        delegation_id: dispatched.delegation?.id,
-        target_session_id: dispatched.delegation?.sessionId,
-        objective: dispatched.objective,
+        work_id: workId,
+        delegation_id: delegation.delegation_id,
+        target_session_id: delegation.session_id,
+        objective: parent.objective,
       })
     } catch (error) {
       return res.status(Number(error?.status) || 500).json({
