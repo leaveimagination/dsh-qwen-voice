@@ -28,7 +28,8 @@ DSH 会话，并在悬浮面板中查看任务状态。
 
 ## 运行环境
 
-- DeepSeek Harness Web `0.1.0-rc.6`
+- DeepSeek Harness Web `0.1.0-rc.6`，或 **DeepSeek Harness Desktop**（内置同一
+  `0.1.0-rc.6` DSH 内核，自动创建 `desktop` profile）
 - Node.js `22.22.2+`、`24.15.0+` 或 `26+`
 - npm `10+` 与 pnpm
 - 提供 Windows 启动脚本；插件和 ACP 桥接本身使用跨平台 Node.js
@@ -48,7 +49,9 @@ DSH 会话，并在悬浮面板中查看任务状态。
 - 可选实时语音前台：Qwen Audio Agent 上游提供的 Hugging Face
   `speech-to-speech` 本地前台；
 - 后台任务 Agent：DeepSeek Harness Web `0.1.0-rc.6`，通过本项目的 ACP
-  Bridge 创建、继续、查询和取消 DSH 会话任务。
+  Bridge 创建、继续、查询和取消 DSH 会话任务。DSH Desktop（`desktop`
+  profile，默认端口 `4975`）与 DSH Web（默认端口 `3080`）使用同一套 DSH
+  内核与 `/api/*` 会话 API，启动脚本会自动探测可用的 DSH 实例并接线。
 
 当前**不支持**直接使用 OpenAI Realtime、Gemini Live 或其他未在上游注册的
 云端实时语音 Provider。后台 Agent 支持某个模型供应商，不代表实时语音前台也支持该供应商。
@@ -97,6 +100,48 @@ pnpm start
 $env:ACP_WORKSPACE = 'C:\path\to\workspace'
 pnpm start
 ```
+
+### 使用 DeepSeek Harness Desktop
+
+插件同样支持 [DeepSeek Harness Desktop](https://github.com/deepseek-ai/deepseek-harness)
+桌面客户端（桌面版内置同一 DSH `0.1.0-rc.6` 内核，运行在 `desktop` profile，
+默认端口 `4975`）。桌面版 Web 页面与独立 Web 版共用同一套 `/api/*` 会话 API，
+因此语音悬浮球、ACP Bridge 和多会话任务调度在桌面版中无需改代码即可工作。
+
+1. **安装到桌面 profile**（与 Web 版共用同一个开发目录，只注册一次即可）：
+
+   ```powershell
+   $env:DSH_PROFILE = 'desktop'
+   pnpm setup
+   ```
+
+2. **启动**（`pnpm start` 会自动探测可用的 DSH 实例）：
+
+   ```powershell
+   pnpm start
+   ```
+
+   `start.mjs` 会依次探测 `4975`（桌面版）与 `3080`（独立 Web 版），并自动：
+   - 把第一个可用的 DSH 实例作为 ACP Bridge 的目标（`DSH_WEB_URL`）；
+   - 把所有可用的 DSH 实例 origin 合并进 Gateway 的允许列表
+     （`QWEN_AUDIO_AGENT_ALLOWED_ORIGINS`），所以无论悬浮球从桌面版还是
+     Web 页面加载，都能连上同一个本地 Gateway。
+
+3. **刷新桌面版页面**（右下角出现悬浮语音球），首次使用时照常在目标会话
+   点击「设为协调会话」。
+
+多实例并存时，可以显式指定 Bridge 连接哪个 DSH：
+
+```powershell
+$env:DSH_WEB_URL = 'http://127.0.0.1:4975'   # 桌面版
+# 或
+$env:DSH_WEB_URL = 'http://127.0.0.1:3080'   # 独立 Web 版
+pnpm start
+```
+
+已知限制：桌面版必须在启动语音前已经打开（探测只认存活实例）；桌面版默认
+端口随其自身配置而定，若你的桌面版端口不是 `4975`，请用 `DSH_WEB_URL`
+显式指定。
 
 ### 配置语音凭证（必做）
 

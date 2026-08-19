@@ -2,8 +2,8 @@
 
 [简体中文](./README.md) | English
 
-Experimental voice-control plugin for DeepSeek Harness Web, **built on top of**
-[Qwen Audio Agent](https://github.com/QwenAudio/qwen-audio-agent).
+Experimental voice-control plugin for DeepSeek Harness Web and Desktop,
+**built on top of** [Qwen Audio Agent](https://github.com/QwenAudio/qwen-audio-agent).
 
 > This project would not exist without Qwen Audio Agent. It reuses Qwen Audio
 > Agent as the realtime voice engine and adds the DeepSeek Harness plugin UI,
@@ -17,7 +17,8 @@ show live task state, interrupt playback, and announce results as tasks finish.
 
 ## Compatibility
 
-- DeepSeek Harness Web `0.1.0-rc.6`
+- DeepSeek Harness Web `0.1.0-rc.6`, or **DeepSeek Harness Desktop** (embeds the
+  same `0.1.0-rc.6` DSH kernel and auto-creates a `desktop` profile)
 - Qwen Audio Agent `1.10.0`
 - Node.js supported by both upstream projects
 - Windows launcher included; the plugin and bridge are cross-platform Node.js
@@ -36,7 +37,10 @@ This release supports:
 - the optional local Hugging Face `speech-to-speech` frontend provided by
   upstream Qwen Audio Agent;
 - DeepSeek Harness Web `0.1.0-rc.6` as the backend task Agent through this
-  project's ACP bridge.
+  project's ACP bridge. DSH Desktop (`desktop` profile, default port `4975`)
+  and DSH Web (default port `3080`) share the same DSH kernel and `/api/*`
+  session API; the launcher auto-detects reachable DSH instances and wires
+  them up.
 
 This release does **not** directly support OpenAI Realtime, Gemini Live, or
 other cloud realtime providers not registered by upstream Qwen Audio Agent.
@@ -50,7 +54,7 @@ Backend model-provider support does not imply realtime voice-provider support.
 | --- | --- |
 | Node.js | `22.22.2+`, `24.15.0+`, or `26+` |
 | pnpm | `10+` (recommended `11.x`) |
-| DeepSeek Harness Web | `0.1.0-rc.6` (installed and running at `127.0.0.1:3080`) |
+| DeepSeek Harness Web | `0.1.0-rc.6` (installed and running at `127.0.0.1:3080`), or DeepSeek Harness Desktop (running, default `127.0.0.1:4975`) |
 
 ### Steps
 
@@ -88,6 +92,51 @@ By default the current working directory is the ACP workspace. To override:
 $env:ACP_WORKSPACE = 'C:\path\to\workspace'
 pnpm start
 ```
+
+### Using DeepSeek Harness Desktop
+
+The plugin also works with the DeepSeek Harness Desktop client (it embeds the
+same DSH `0.1.0-rc.6` kernel, runs the `desktop` profile, and listens on port
+`4975` by default). The Desktop frontend shares the same `/api/*` session API
+as the standalone Web build, so the floating orb, ACP Bridge, and multi-session
+task routing work without code changes.
+
+1. **Register into the desktop profile** (same dev directory as Web; register
+   once per profile):
+
+   ```powershell
+   $env:DSH_PROFILE = 'desktop'
+   pnpm setup
+   ```
+
+2. **Start** (`pnpm start` auto-detects the reachable DSH instance):
+
+   ```powershell
+   pnpm start
+   ```
+
+   `start.mjs` probes `4975` (Desktop) then `3080` (standalone Web) and:
+   - uses the first reachable DSH instance as the ACP Bridge target
+     (`DSH_WEB_URL`);
+   - merges every reachable DSH instance origin into the Gateway allow-list
+     (`QWEN_AUDIO_AGENT_ALLOWED_ORIGINS`), so the floating orb connects to the
+     same local Gateway whether it loaded from the Desktop or Web page.
+
+3. **Refresh the Desktop page** (the floating orb appears), then click
+   “Set as coordinator session” in the target session on first use.
+
+When several DSH instances run side by side, point the bridge explicitly:
+
+```powershell
+$env:DSH_WEB_URL = 'http://127.0.0.1:4975'   # Desktop
+# or
+$env:DSH_WEB_URL = 'http://127.0.0.1:3080'   # standalone Web
+pnpm start
+```
+
+Known limitation: Desktop must already be open before starting voice (the probe
+only recognizes live instances); if your Desktop port differs from `4975`, set
+`DSH_WEB_URL` explicitly.
 
 ### Configure voice credentials (required)
 
