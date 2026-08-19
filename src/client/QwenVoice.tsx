@@ -55,6 +55,7 @@ interface GatewayTask {
   id?: string
   objective?: string
   status?: string
+  createdAt?: number
   elapsedMs?: number
   error?: string
   delegation?: {
@@ -67,6 +68,7 @@ interface TaskView {
   id: string
   title: string
   phase: string
+  createdAt?: number
   elapsedMs: number
   error?: string
   targetSessionId?: string
@@ -113,6 +115,31 @@ function taskPhaseLabel(phase: string): string {
     failed: '失败',
     cancelled: '已取消',
   } as Record<string, string>)[phase] || phase
+}
+
+const MAX_TASKS = 8
+const TERMINAL_PHASES = new Set(['completed', 'failed', 'cancelled'])
+
+function taskCreatedAtLabel(timestamp?: number): string {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  const now = new Date()
+  const sameDay = (
+    date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate()
+  )
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  return sameDay ? time : `${date.getMonth() + 1}/${date.getDate()} ${time}`
+}
+
+function sortTasks(items: TaskView[]): TaskView[] {
+  return [...items].sort((a, b) => {
+    const aActive = TERMINAL_PHASES.has(a.phase) ? 1 : 0
+    const bActive = TERMINAL_PHASES.has(b.phase) ? 1 : 0
+    if (aActive !== bActive) return aActive - bActive
+    return (b.createdAt || 0) - (a.createdAt || 0)
+  }).slice(0, MAX_TASKS)
 }
 
 /** Qwen Audio Agent control mounted beside the DSH send action. */
@@ -194,6 +221,7 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
         id: task.id as string,
         title,
         phase,
+        createdAt: task.createdAt,
         elapsedMs: task.elapsedMs || 0,
         error: task.error,
         targetSessionId: task.delegation?.sessionId,
@@ -202,8 +230,34 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
       const updated = existing < 0
         ? [next, ...current]
         : current.map(item => item.id === next.id ? { ...item, ...next } : item)
-      return updated.slice(0, 6)
+      return sortTasks(updated)
     })
+  }, [])
+
+  const refreshTasks = useCallback(async (): Promise<void> => {
+    try {
+      const response = await fetch(`${GATEWAY_ORIGIN}/api/tasks`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const body = await response.json() as { tasks?: GatewayTask[] }
+      setTasks(current => {
+        const byId = new Map(current.map(task => [task.id, task]))
+        for (const task of body.tasks || []) {
+          if (!task.id) continue
+          byId.set(task.id, {
+            id: task.id,
+            title: task.delegation?.title || task.objective || 'DSH 会话任务',
+            phase: task.status || 'accepted',
+            createdAt: task.createdAt,
+            elapsedMs: task.elapsedMs || 0,
+            error: task.error,
+            targetSessionId: task.delegation?.sessionId,
+          })
+        }
+        return sortTasks([...byId.values()])
+      })
+    } catch (reason) {
+      setError(`无法加载任务列表：${reason instanceof Error ? reason.message : String(reason)}`)
+    }
   }, [])
 
   const cancelTask = useCallback(async (taskId: string): Promise<void> => {
@@ -290,6 +344,16 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
   useEffect(() => {
     if (open) void refreshCoordinatorBinding()
   }, [open, refreshCoordinatorBinding])
+
+  useEffect(() => {
+    if (open) void refreshTasks()
+  }, [open, refreshTasks])
+
+  // Re-sync the task board whenever the voice lane (re)connects, so a page
+  // reload or gateway restart still shows the authoritative task list.
+  useEffect(() => {
+    if (connected && open) void refreshTasks()
+  }, [connected, open, refreshTasks])
 
   useEffect(() => {
     let disposed = false
@@ -613,7 +677,11 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
                   <span>
                     <b>{task.title}</b>
                     <small><em>协调 Agent</em><i aria-hidden>→</i><em>{task.targetSessionId ? '目标 DSH 会话' : '正在路由'}</em></small>
-                    <small>{taskPhaseLabel(task.phase)}{task.elapsedMs > 0 ? ` · ${Math.round(task.elapsedMs / 1000)}s` : ''}</small>
+                    <small>
+                      <em>{taskPhaseLabel(task.phase)}</em>
+                      {task.createdAt ? <em>· {taskCreatedAtLabel(task.createdAt)} 创建</em> : null}
+                      {task.elapsedMs > 0 ? <em>· {Math.round(task.elapsedMs / 1000)}s</em> : null}
+                    </small>
                   </span>
                   <span className={css.taskActions}>
                     {task.targetSessionId && (
