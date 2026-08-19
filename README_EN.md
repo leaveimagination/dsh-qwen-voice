@@ -42,26 +42,92 @@ This release does **not** directly support OpenAI Realtime, Gemini Live, or
 other cloud realtime providers not registered by upstream Qwen Audio Agent.
 Backend model-provider support does not imply realtime voice-provider support.
 
-## Install
+## Install (clone & run)
+
+### Prerequisites
+
+| Dependency | Version |
+| --- | --- |
+| Node.js | `22.22.2+`, `24.15.0+`, or `26+` |
+| pnpm | `10+` (recommended `11.x`) |
+| DeepSeek Harness Web | `0.1.0-rc.6` (installed and running at `127.0.0.1:3080`) |
+
+### Steps
 
 ```powershell
+# 1. Clone and install (includes the pinned Qwen Audio Agent 1.10.0)
+git clone https://github.com/leaveimagination/dsh-qwen-voice.git
+cd dsh-qwen-voice
 pnpm install
+
+# 2. Apply compatibility patches + build + register into a DSH profile
 pnpm setup
 ```
 
-Copy `start-qwen-dsh-voice.example.cmd` to a local filename, adjust
-`ACP_WORKSPACE` if needed, then start the gateway:
+`pnpm setup` does three things automatically:
+
+1. patches the project-pinned Qwen Audio Agent `1.10.0` (never touches a global
+   install);
+2. installs the ACP Bridge dependencies and runs typecheck + build;
+3. registers the plugin into `--profile web` via the DSH CLI (override with the
+   `DSH_PROFILE` env var, e.g. `$env:DSH_PROFILE = 'voice-test'`).
+
+### Start
 
 ```powershell
 pnpm start
 ```
 
-Restart DSH Web and open `http://127.0.0.1:3080`.
+Starts the voice runtime, Gateway, and ACP Bridge (foreground, stop with
+`Ctrl+C`). Then **refresh the DSH Web page** (`http://127.0.0.1:3080`) — a
+floating voice orb appears in the bottom-right corner.
 
-The default voice frontend requires a user-provided DashScope API key. When
-using local `speech-to-speech`, configure its endpoint as documented upstream.
-Credentials remain in local Qwen Audio Agent configuration. No API key is
-included in this repository or sent through the DSH browser bundle.
+By default the current working directory is the ACP workspace. To override:
+
+```powershell
+$env:ACP_WORKSPACE = 'C:\path\to\workspace'
+pnpm start
+```
+
+### Configure voice credentials (required)
+
+The default frontend uses DashScope realtime voice and needs your own API key:
+
+1. After the first start, edit the Qwen Audio Agent local config:
+   `%USERPROFILE%\.config\qwaudio\config.env`
+2. Set (`QWEN_AUDIO_REALTIME_PROVIDER` stays `dashscope`):
+
+```ini
+DASHSCOPE_API_KEY=sk-your-key
+QWEN_AUDIO_REALTIME_PROVIDER=dashscope
+QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
+```
+
+3. Restart `pnpm start` for the config to take effect.
+
+Credentials stay in the local config; no API key is included in this repository
+or in the browser plugin bundle.
+
+### First use: bind the coordinator session
+
+Open the voice panel and click **Set as coordinator session** in the target DSH
+session. Voice tasks are dispatched by that Coordinator session to multiple
+child sessions in parallel; switching Harness conversations keeps the voice
+connection alive.
+
+### Troubleshooting
+
+- **No floating orb on the page**: confirm `pnpm setup` succeeded, DSH Web was
+  restarted, and the plugin shows up in `dsh plugin --profile web list`.
+- **Gateway fails to start**: check the startup output and confirm
+  `QWEN_AUDIO_REALTIME_PROVIDER=dashscope` in `config.env` (no other value is
+  supported).
+- **Cancelling a task hangs**: the cancellation deadlock is fixed in v1.0.0+;
+  if it still misbehaves, open an issue with the Gateway log.
+
+The GitHub Actions workflow re-runs install → patch → typecheck → build →
+bridge tests → CLI check on a fresh Windows runner to prove that "clone and
+run" works.
 
 ## What the compatibility patch changes
 

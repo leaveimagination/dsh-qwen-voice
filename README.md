@@ -53,24 +53,43 @@ DSH 会话，并在悬浮面板中查看任务状态。
 当前**不支持**直接使用 OpenAI Realtime、Gemini Live 或其他未在上游注册的
 云端实时语音 Provider。后台 Agent 支持某个模型供应商，不代表实时语音前台也支持该供应商。
 
-## 安装
+## 安装（即插即用）
+
+### 前置要求
+
+| 依赖 | 版本 |
+| --- | --- |
+| Node.js | `22.22.2+`、`24.15.0+` 或 `26+` |
+| pnpm | `10+`（推荐 `11.x`） |
+| DeepSeek Harness Web | `0.1.0-rc.6`（已安装并运行在 `127.0.0.1:3080`） |
+
+### 步骤
 
 ```powershell
+# 1. 克隆并安装依赖（含锁定的 Qwen Audio Agent 1.10.0）
+git clone https://github.com/leaveimagination/dsh-qwen-voice.git
+cd dsh-qwen-voice
 pnpm install
+
+# 2. 应用兼容补丁 + 构建 + 注册到 DSH profile（默认 web）
 pnpm setup
 ```
 
-安装完成后启动整个语音 Runtime、Gateway 和 ACP Bridge（前台运行，按
-`Ctrl+C` 停止）：
+`pnpm setup` 会自动完成三件事：
+
+1. 对项目内锁定的 Qwen Audio Agent `1.10.0` 应用兼容补丁（不会动全局安装）；
+2. 安装 ACP Bridge 依赖并执行类型检查、构建；
+3. 通过 DSH CLI 把插件注册到 `--profile web`（可用 `DSH_PROFILE` 环境变量指定
+   其他 profile，例如 `$env:DSH_PROFILE = 'voice-test'`）。
+
+### 启动
 
 ```powershell
 pnpm start
 ```
 
-重启 DSH Web，并打开 `http://127.0.0.1:3080`。
-
-仓库的 GitHub Actions 会在全新的 Windows Runner 上重复执行依赖安装、补丁、
-类型检查、构建、Bridge 测试和本地 CLI 检查，不需要准备第二台电脑。
+启动整个语音 Runtime、Gateway 和 ACP Bridge（前台运行，按 `Ctrl+C` 停止）。
+之后**刷新 DSH Web 页面**（`http://127.0.0.1:3080`），右下角会出现悬浮语音球。
 
 默认把启动命令所在目录作为 ACP 工作区。需要指定工作区时：
 
@@ -79,9 +98,41 @@ $env:ACP_WORKSPACE = 'C:\path\to\workspace'
 pnpm start
 ```
 
-默认语音前台需要用户自行配置 DashScope API Key；使用本地
-`speech-to-speech` 时按其上游文档配置服务地址。凭证只保存在 Qwen Audio
-Agent 的本地配置中，仓库和 DSH 浏览器插件包均不包含 API Key。
+### 配置语音凭证（必做）
+
+默认语音前台使用 DashScope 实时语音，需要你自己的 API Key：
+
+1. 启动一次后，编辑 Qwen Audio Agent 的本地配置：
+   `%USERPROFILE%\.config\qwaudio\config.env`
+2. 设置（`QWEN_AUDIO_REALTIME_PROVIDER` 保持 `dashscope`）：
+
+```ini
+DASHSCOPE_API_KEY=sk-你的Key
+QWEN_AUDIO_REALTIME_PROVIDER=dashscope
+QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
+```
+
+3. 重启 `pnpm start` 使配置生效。
+
+凭证只保存在本地配置中；仓库和浏览器插件包均不包含任何 API Key。
+
+### 首次使用：绑定协调会话
+
+打开语音面板，在目标 DSH 会话中点击「设为协调会话」。语音任务会由该
+Coordinator 会话调度到多个子会话并行执行；切换 Harness 会话不影响语音连接。
+
+### 故障排查
+
+- **页面没有悬浮球**：确认 `pnpm setup` 成功、DSH Web 已重启、插件在
+  `dsh plugin --profile web list` 中可见。
+- **Gateway 起不来**：查看启动输出，确认 `config.env` 中
+  `QWEN_AUDIO_REALTIME_PROVIDER` 为 `dashscope`（不支持其他值）。
+- **取消任务卡住**：当前版本已修复取消死锁（v1.0.0+），如仍异常请附
+  Gateway 日志提 issue。
+
+仓库的 GitHub Actions 会在全新的 Windows Runner 上重复执行依赖安装、补丁、
+类型检查、构建、Bridge 测试和本地 CLI 检查，验证「克隆即装」的可靠性。
+
 
 ## 临时兼容补丁
 
