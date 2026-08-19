@@ -1,5 +1,6 @@
 packages:
   - .
+  - tools/*
 allowBuilds:
   '@qwen-code/open-computer-use': true
 minimumReleaseAgeExclude:

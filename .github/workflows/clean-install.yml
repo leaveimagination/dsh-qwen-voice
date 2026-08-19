@@ -30,11 +30,20 @@ jobs:
       - name: Install ACP bridge
         run: pnpm --dir bridge install --frozen-lockfile
 
+      - name: Install coordinator tools
+        run: pnpm --dir tools/dsh-qwen-coordinator-tools install --frozen-lockfile
+
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Build
         run: pnpm build
+
+      - name: Typecheck coordinator tools
+        run: pnpm --dir tools/dsh-qwen-coordinator-tools typecheck
+
+      - name: Build coordinator tools
+        run: pnpm --dir tools/dsh-qwen-coordinator-tools build
 
       - name: Test ACP bridge
         run: pnpm --dir bridge test

@@ -1,0 +1,4 @@
+- insert:
+    - id: qwen-coordinator-tools
+      name: dsh-qwen-coordinator-tools
+      config: {}

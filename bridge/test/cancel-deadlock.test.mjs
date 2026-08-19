@@ -26,7 +26,7 @@ test('cancellation never re-drives the coordinator (deadlock guard)', () => {
 
 test('cancellation timeout guard is wired in the DSH coordinator tools', () => {
   const tools = fs.readFileSync(
-    path.join(root, '..', 'dsh-qwen-coordinator-tools', 'src', 'index.ts'),
+    path.join(root, 'tools', 'dsh-qwen-coordinator-tools', 'src', 'index.ts'),
     'utf8',
   )
   assert.match(tools, /QWEN_COORDINATOR_TOOL_TIMEOUT_MS/)

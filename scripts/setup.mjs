@@ -18,11 +18,17 @@ function run(command, args, cwd = root) {
 }
 
 const profile = process.env.DSH_PROFILE || 'web'
+const tools = path.join(root, 'tools', 'dsh-qwen-coordinator-tools')
 
 run(process.execPath, ['scripts/patch-qwen-audio-agent.mjs'])
 run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['install'], path.join(root, 'bridge'))
 run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['typecheck'])
 run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['build'])
+// The coordinator tools plugin lives in this repository under tools/ and is
+// required for coordinator-only session operations.
+run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['install'], tools)
+run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['--dir', tools, 'typecheck'])
+run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['--dir', tools, 'build'])
 // dsh plugin add auto-creates the profile if it does not exist yet, so a
 // fresh machine only needs DeepSeek Harness Web installed (see README).
 run(process.platform === 'win32' ? 'npx.cmd' : 'npx', [
@@ -34,6 +40,16 @@ run(process.platform === 'win32' ? 'npx.cmd' : 'npx', [
   profile,
   'add',
   root,
+])
+run(process.platform === 'win32' ? 'npx.cmd' : 'npx', [
+  '-p',
+  '@deepseek-ai/dsh@0.1.0-rc.6',
+  'dsh',
+  'plugin',
+  '--profile',
+  profile,
+  'add',
+  tools,
 ])
 
 console.log('\nSetup complete. Start with: pnpm start')
