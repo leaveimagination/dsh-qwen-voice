@@ -18,5 +18,4 @@ export declare function upsertUserTranscript(items: VoiceMessage[], input: Pick<
     final?: boolean;
 }): VoiceMessage[];
 export declare function discardUserTranscript(items: VoiceMessage[], turnId?: string): VoiceMessage[];
-export declare function settleUserTranscript(items: VoiceMessage[], turnId?: string): VoiceMessage[];
 export declare function upsertAssistantTranscript(items: VoiceMessage[], message: VoiceMessage, replace?: boolean): VoiceMessage[];

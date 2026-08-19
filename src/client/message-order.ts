@@ -77,16 +77,6 @@ export function discardUserTranscript(items: VoiceMessage[], turnId?: string): V
   return items.filter(item => item.id !== id || item.final)
 }
 
-export function settleUserTranscript(items: VoiceMessage[], turnId?: string): VoiceMessage[] {
-  if (!turnId) return items
-  const id = `user:${turnId}`
-  const index = items.findIndex(item => item.id === id)
-  if (index < 0) return items
-  const next = [...items]
-  next[index] = { ...next[index], final: true, live: false }
-  return next
-}
-
 export function upsertAssistantTranscript(
   items: VoiceMessage[],
   message: VoiceMessage,

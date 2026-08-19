@@ -5,7 +5,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { decodePcm, pcmBase64, resample } from './audio.ts'
 import {
   discardUserTranscript,
-  settleUserTranscript,
   upsertAssistantTranscript,
   upsertUserTranscript,
   type VoiceMessage,
@@ -35,7 +34,6 @@ interface GatewayEvent {
   sampleRate?: number
   inputSampleRate?: number
   message?: string
-  reason?: string
   responseId?: string
   turnId?: string
   taskId?: string
@@ -364,9 +362,7 @@ export function QwenVoice(props: VoiceProps): React.JSX.Element {
           }
         }
         if (event.type === 'transcript.discard' && event.role === 'user') {
-          setMessages(items => event.reason === 'turn_invalid'
-            ? discardUserTranscript(items, event.turnId)
-            : settleUserTranscript(items, event.turnId))
+          setMessages(items => discardUserTranscript(items, event.turnId))
         }
         if (event.type === 'timeline.inline' && event.item?.content) {
           const item = event.item
