@@ -563,4 +563,78 @@ const bindingTarget = path.join(root, 'server/src/agent/dsh-coordinator-binding.
 fs.copyFileSync(bindingOverlay, bindingTarget)
 console.log('installed: server/src/agent/dsh-coordinator-binding.mjs')
 
+// Cancel must never re-drive the coordinator when the cancellation was issued
+// by the coordinator itself. In the DSH integration the coordinator is a
+// native DSH Session, so it is never registered in activeCoordinatorTurns /
+// managedCoordinatorRuns: `busy` is always false here and the old
+// coordinatorControl branch asked the coordinator (which is itself executing
+// this cancellation tool call) to run another turn cancelling the same work —
+// a self-recursive deadlock. Observed 2026-08-19 14:44: the cancel tool hung
+// ~58s until the user hit stop, then the plugin stayed frozen ~14 minutes.
+// Cancellation now always goes straight to the ACP transport (abort +
+// cancelSession) and the coordinator learns the outcome via
+// pendingCoordinatorFacts reconciliation.
+replaceOnce(
+  'server/src/agent/acp-backend-adapter.mjs',
+  `    const coordinator = this.coordinatorSessions.get(
+      coordinatorKey(ownerId, this.protocol),
+    )
+    const busy = coordinator
+      && this.activeCoordinatorTurns.has(coordinator.sessionId)
+    if (!busy) {
+      try {
+        const instruction = this.profile.cancelInstruction?.(record)
+          || \`请调用 qwen_audio_agent_session_cancel 取消 delegation_id=\${record.id}。\`
+        await this.coordinatorControl(workId, [
+          '<qwen_audio_agent_control kind="cancel">',
+          instruction,
+          '工具返回后只简短确认，不要做其他工作。',
+          '</qwen_audio_agent_control>',
+        ].join('\\n'), { ownerId, signal })
+        return {
+          route: 'coordinator',
+          layer: 'delegated',
+          delegationId: record.id,
+          sessionId: record.sessionId,
+        }
+      } catch {
+        // Cancellation is urgent; fall through to the ACP transport.
+      }
+    }
+    await this.cancelDelegation({ delegation_id: record.id })`,
+  `    const coordinator = this.coordinatorSessions.get(
+      coordinatorKey(ownerId, this.protocol),
+    )
+    // DSH integration: the coordinator is a native DSH Session, which is never
+    // registered in activeCoordinatorTurns/managedCoordinatorRuns, so "busy" is
+    // always false. Driving coordinatorControl here would ask the coordinator
+    // (which is itself executing this cancellation tool call) to run another
+    // turn that cancels the same work - a self-recursive deadlock that froze
+    // the plugin for ~14 minutes (2026-08-19 14:44 incident). Cancellation
+    // always goes straight to the ACP transport: abort + cancelSession. The
+    // coordinator learns the outcome through pendingCoordinatorFacts.
+    if (false && !busy) {
+      try {
+        const instruction = this.profile.cancelInstruction?.(record)
+          || \`请调用 qwen_audio_agent_session_cancel 取消 delegation_id=\${record.id}。\`
+        await this.coordinatorControl(workId, [
+          '<qwen_audio_agent_control kind="cancel">',
+          instruction,
+          '工具返回后只简短确认，不要做其他工作。',
+          '</qwen_audio_agent_control>',
+        ].join('\\n'), { ownerId, signal })
+        return {
+          route: 'coordinator',
+          layer: 'delegated',
+          delegationId: record.id,
+          sessionId: record.sessionId,
+        }
+      } catch {
+        // Cancellation is urgent; fall through to the ACP transport.
+      }
+    }
+    await this.cancelDelegation({ delegation_id: record.id })`,
+  'self-recursive deadlock that froze',
+)
+
 console.log('Qwen Audio Agent integration patch complete.')
