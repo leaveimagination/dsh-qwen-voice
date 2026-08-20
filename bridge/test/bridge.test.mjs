@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { assistantText, DshWebAcpAgent, promptText } from '../src/index.mjs'
+import {
+  assistantText,
+  coordinatorDeliveryMode,
+  DshWebAcpAgent,
+  mayFallbackFromSteer,
+  promptText,
+} from '../src/index.mjs'
 
 test('promptText joins only text blocks', () => {
   assert.equal(promptText([
@@ -8,6 +14,26 @@ test('promptText joins only text blocks', () => {
     { type: 'resource_link', uri: 'file:///x' },
     { type: 'text', text: 'DSH' },
   ]), '你好\nDSH')
+})
+
+test('coordinator delivery defaults to queue and only explicit updates steer', () => {
+  assert.equal(coordinatorDeliveryMode('ordinary prompt'), 'queue')
+  assert.equal(coordinatorDeliveryMode([
+    '<qwen_audio_agent_request>',
+    JSON.stringify({ input: { routing: { delivery: 'queue' } } }),
+    '</qwen_audio_agent_request>',
+  ].join('\n')), 'queue')
+  assert.equal(coordinatorDeliveryMode([
+    '<qwen_audio_agent_request>',
+    JSON.stringify({ input: { routing: { delivery: 'steer' } } }),
+    '</qwen_audio_agent_request>',
+  ].join('\n')), 'steer')
+})
+
+test('steer falls back only for a confirmed closed steering window', () => {
+  assert.equal(mayFallbackFromSteer({ status: 409 }), true)
+  assert.equal(mayFallbackFromSteer(new Error('no active turn')), true)
+  assert.equal(mayFallbackFromSteer(new Error('network timeout')), false)
 })
 
 test('assistantText reads text blocks after the baseline', () => {

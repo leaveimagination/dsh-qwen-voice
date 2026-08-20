@@ -2,11 +2,45 @@
 
 import * as acp from '@agentclientprotocol/sdk'
 import { Readable, Writable } from 'node:stream'
+import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:3080'
 const DEFAULT_POLL_MS = 500
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000
+
+export function coordinatorDeliveryMode(text) {
+  const match = String(text || '').match(
+    /<qwen_audio_agent_request>\s*([\s\S]*?)\s*<\/qwen_audio_agent_request>/,
+  )
+  if (!match) return 'queue'
+  try {
+    const envelope = JSON.parse(match[1])
+    return envelope?.input?.routing?.delivery === 'steer' ? 'steer' : 'queue'
+  } catch {
+    return 'queue'
+  }
+}
+
+export function mayFallbackFromSteer(error) {
+  const status = Number(error?.status || error?.statusCode || error?.response?.status)
+  if ([409, 412, 422].includes(status)) return true
+  const message = String(error?.message || error || '').toLowerCase()
+  return /not running|not active|cannot steer|steer.*(?:closed|unavailable)|no active turn/.test(message)
+}
+
+// File logging for the interjection path: the gateway pipes bridge stdio, so
+// console output never reaches the gateway log. Set DSH_QWEN_BRIDGE_LOG to a
+// writable path to record every prompt delivery and its mode/result.
+const BRIDGE_LOG_PATH = process.env.DSH_QWEN_BRIDGE_LOG || ''
+function bridgeLog(...args) {
+  if (!BRIDGE_LOG_PATH) return
+  try {
+    appendFileSync(BRIDGE_LOG_PATH, `[${new Date().toISOString()}] ${args.join(' ')}\n`)
+  } catch {
+    // Logging must never break delivery.
+  }
+}
 
 export function promptText(parts) {
   return parts
@@ -202,20 +236,27 @@ export class DshWebAcpAgent {
       const routedText = titleHint
         ? `${titleHint}\n\n${text}`
         : text
-      // Interjection: prefer steering into the running turn (steps-level
-      // injection) so follow-ups reach an executing agent immediately. Steer
-      // only works while the target session is running; when it is idle (or
-      // the steer window just closed) DSH rejects it, so fall back to queue,
-      // which waits for the next turn boundary — the DSH-composer "queue"
-      // delivery. New sessions never have a running turn, so they naturally
-      // fall back to queue as well.
+      // Delivery is selected by the structured coordination envelope. New or
+      // independent work queues normally; only an explicit modification of a
+      // running work may steer into the active DSH turn.
       const deliver = async (mode) => {
         await this.client.prompt(params.sessionId, routedText, controller.signal, mode)
       }
-      try {
-        await deliver('steer')
-      } catch (steerError) {
+      const deliveryMode = coordinatorDeliveryMode(text)
+      bridgeLog(`prompt ${params.sessionId} "${text.slice(0, 60)}"`)
+      if (deliveryMode === 'steer') {
+        try {
+          await deliver('steer')
+          bridgeLog(`steer OK ${params.sessionId}`)
+        } catch (steerError) {
+          bridgeLog(`steer FAILED ${params.sessionId}: ${String(steerError?.message || steerError).slice(0, 160)}`)
+          if (!mayFallbackFromSteer(steerError)) throw steerError
+          await deliver('queue')
+          bridgeLog(`queue OK ${params.sessionId}`)
+        }
+      } else {
         await deliver('queue')
+        bridgeLog(`queue OK ${params.sessionId}`)
       }
       let history
       while (true) {

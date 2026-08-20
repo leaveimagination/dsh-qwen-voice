@@ -14,11 +14,9 @@ const qwenCli = path.join(
   'qwenaudio.mjs',
 )
 
-// DSH instances the voice bridge can attach to, in probe order. The standalone
-// DSH Web build listens on 3080 by default while DeepSeek Harness Desktop
-// embeds its own DSH kernel on 4975. Probing 4975 first keeps desktop users
-// working out of the box; web-only setups simply fall back to 3080.
-const DSH_PROBE_PORTS = [4975, 3080]
+// Bind the complete voice stack to one DSH origin. Never probe another DSH
+// instance: running Web and Desktop together must not split session ownership.
+const DEFAULT_DSH_WEB_URL = 'http://127.0.0.1:3080'
 
 async function isDshInstanceAlive(baseUrl) {
   try {
@@ -39,36 +37,22 @@ async function isDshInstanceAlive(baseUrl) {
   }
 }
 
-// Probe every candidate DSH instance and return the reachable base URLs. Every
-// reachable origin is added to the Gateway allow-list so the floating orb works
-// regardless of which front-end page (web 3080 or Desktop 4975) loaded it.
-async function detectDshInstances() {
-  const reachable = []
-  for (const port of DSH_PROBE_PORTS) {
-    const baseUrl = `http://127.0.0.1:${port}`
-    if (await isDshInstanceAlive(baseUrl)) reachable.push(baseUrl)
-  }
-  return reachable
+const bridgeUrl = process.env.DSH_WEB_URL || DEFAULT_DSH_WEB_URL
+const parsedBridgeUrl = new URL(bridgeUrl)
+if (!['127.0.0.1', 'localhost', '[::1]'].includes(parsedBridgeUrl.hostname)) {
+  throw new Error(`DSH_WEB_URL must be a loopback URL, got ${parsedBridgeUrl.hostname}`)
 }
-
-const dshInstances = await detectDshInstances()
-const bridgeUrl = process.env.DSH_WEB_URL || dshInstances[0] || 'http://127.0.0.1:3080'
+const dshAlive = await isDshInstanceAlive(parsedBridgeUrl.origin)
 const mergedOrigins = [
   ...String(process.env.QWEN_AUDIO_AGENT_ALLOWED_ORIGINS || '')
     .split(',')
     .map(value => value.trim())
     .filter(Boolean),
-  ...dshInstances.map(url => new URL(url).origin),
+  parsedBridgeUrl.origin,
 ]
 const allowedOrigins = [...new Set(mergedOrigins)].join(',')
 
-if (process.env.DSH_WEB_URL) {
-  console.log(`[dsh-qwen-voice] DSH_WEB_URL set explicitly: ${bridgeUrl}`)
-} else if (dshInstances.length > 0) {
-  console.log(`[dsh-qwen-voice] detected DSH instance: ${bridgeUrl} (reachable: ${dshInstances.join(', ')})`)
-} else {
-  console.log(`[dsh-qwen-voice] no DSH instance detected, defaulting to ${bridgeUrl}`)
-}
+console.log(`[dsh-qwen-voice] fixed DSH Web instance: ${parsedBridgeUrl.origin} (${dshAlive ? 'reachable' : 'not reachable'})`)
 console.log(`[dsh-qwen-voice] Gateway allowed origins: ${allowedOrigins || '(none)'}`)
 
 const env = {
@@ -76,9 +60,9 @@ const env = {
   AGENT_PROTOCOL: process.env.AGENT_PROTOCOL || 'acp',
   ACP_COMMAND: process.env.ACP_COMMAND || process.execPath,
   ACP_ARGS: process.env.ACP_ARGS || path.join(root, 'bridge', 'src', 'index.mjs'),
-  ACP_LABEL: process.env.ACP_LABEL || 'DSH Desktop',
+  ACP_LABEL: process.env.ACP_LABEL || 'DSH Web',
   ACP_WORKSPACE: process.env.ACP_WORKSPACE || process.cwd(),
-  DSH_WEB_URL: bridgeUrl,
+  DSH_WEB_URL: parsedBridgeUrl.origin,
   ...(allowedOrigins
     ? { QWEN_AUDIO_AGENT_ALLOWED_ORIGINS: allowedOrigins }
     : {}),

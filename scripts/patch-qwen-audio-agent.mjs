@@ -63,6 +63,286 @@ replaceOnce(
   'laneKey: `coordinator:${this.ownerId}:${this.sessionId}:${turnId}`',
 )
 
+// Realtime must classify the relationship to existing work explicitly. The
+// bridge consumes this structured decision from the coordinator envelope;
+// it never guesses routing from user text or keywords.
+replaceOnce(
+  'server/src/voice/frontend-tools.mjs',
+  `        objective: {
+          type: 'string',
+          description: '可直接执行的目标，忠实保留用户要求的结果、约束、执行方式，以及本项工作与既有工作的关系。可以根据当前对话消解明确指代，但不得遗漏、推断或改变这些语义，也不要提交占位目标；近期对话会随工作一并提供。',
+        },
+      },
+      required: ['objective'],`,
+  `        objective: {
+          type: 'string',
+          description: '可直接执行的目标，忠实保留用户要求的结果、约束、执行方式，以及本项工作与既有工作的关系。可以根据当前对话消解明确指代，但不得遗漏、推断或改变这些语义，也不要提交占位目标；近期对话会随工作一并提供。',
+        },
+        routing: {
+          type: 'string',
+          enum: ['new_task', 'continue_task', 'modify_active_task'],
+          description: 'new_task=独立新工作；continue_task=继续既有但当前未执行的工作；modify_active_task=补充、纠正或重定向正在执行的工作。不得仅凭“再”“继续”等单个词判断，必须结合完整对话语义。',
+        },
+        target_work_id: {
+          type: 'string',
+          description: '已由系统返回且用户明确指向的 work_id；不得猜造。modify_active_task 在存在多个活动任务时必须提供。',
+        },
+      },
+      required: ['objective', 'routing'],`,
+  "enum: ['new_task', 'continue_task', 'modify_active_task']",
+)
+
+replaceOnce(
+  'server/src/voice/frontend-tools.mjs',
+  `    description: '执行需要当前信息、搜索、检查、工具、文件、屏幕、应用、代码、图片生成、创作，或继续、修改已有工作的请求。这是你向用户提供的执行能力；请求明确时直接调用，不要先否认能力或说需要转交。询问此前工作的状态、进度或阶段结果时改用 get_agent_task_status。返回 accepted 只表示已受理，不表示已完成。',`,
+  `    description: '执行需要当前信息、搜索、检查、工具、文件、屏幕、应用、代码、图片生成、创作，或继续、修改已有工作的请求。这是你向用户提供的执行能力；请求明确时直接调用，不要先否认能力或说需要转交。用户要求给正在执行的任务追加要求、纠正方向、改变重点或重定向时，必须直接调用本工具并设置 routing=modify_active_task，不要先调用 get_agent_task_status。只有单纯询问状态、进度或阶段结果时才改用 get_agent_task_status。返回 accepted 只表示已受理，不表示已完成。',`,
+  '只有单纯询问状态、进度或阶段结果时',
+)
+
+replaceOnce(
+  'server/src/voice/frontend-tools.mjs',
+  `    description: '查询此前工作的状态、进度或阶段结果，也可列出当前会话中的工作、定时任务和提醒。用户询问此前工作时统一调用，不要改用 spawn_thinking。查询单项可传入已知 ID；省略时查询最近一项；列出全部时设置 list_all=true。',`,
+  `    description: '仅查询此前工作的状态、进度或阶段结果，也可列出当前会话中的工作、定时任务和提醒。不得用于给任务追加要求、纠正方向、改变重点或重定向；这些操作即使针对正在执行的任务，也必须调用 spawn_thinking 并设置 routing=modify_active_task。查询单项可传入已知 ID；省略时查询最近一项；列出全部时设置 list_all=true。',`,
+  '不得用于给任务追加要求、纠正方向、改变重点或重定向',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `  createWork({ turnId, objective, verbatimRequest, submissionKey }) {`,
+  `  createWork({ turnId, objective, verbatimRequest, submissionKey, routing }) {`,
+  'submissionKey, routing })',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `          workingDirectory: this.getClientContext()?.workingDirectory,
+        }`,
+  `          workingDirectory: this.getClientContext()?.workingDirectory,
+          routing,
+        }`,
+  'workingDirectory: this.getClientContext()?.workingDirectory,\n          routing,',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `      task = this.createWork({
+        turnId,
+        objective,
+        verbatimRequest,
+        submissionKey,
+      })`,
+  `      const requestedRouting = String(args.routing || 'new_task')
+      const targetWorkId = String(args.target_work_id || '').trim()
+      const outerTasks = this.taskManager.list({ ownerId: this.ownerId })
+        .filter(item => !item.parentWorkId)
+      const activeTasks = outerTasks.filter(item => [
+        'running', 'delegated',
+      ].includes(item.status))
+      let targetTask = targetWorkId
+        ? outerTasks.find(item => item.id === targetWorkId)
+        : null
+      if (requestedRouting === 'modify_active_task' && !targetTask) {
+        if (activeTasks.length !== 1) {
+          await this.sendOutput(callId, failure(
+            activeTasks.length ? 'ambiguous_task_target' : 'active_task_not_found',
+            activeTasks.length
+              ? '当前有多个进行中的任务，请先确认要修改哪一项。'
+              : '没有找到仍在执行、可被修改的任务。',
+            { retryable: true, candidates: activeTasks.map(item => ({ work_id: item.id, objective: item.objective })) },
+          ), turnId)
+          return
+        }
+        targetTask = activeTasks[0]
+      }
+      if (requestedRouting === 'modify_active_task' && !activeTasks.some(item => item.id === targetTask?.id)) {
+        await this.sendOutput(callId, failure(
+          'active_task_not_found',
+          '指定任务已不在运行，不能把本轮作为执行中修改发送。',
+          { retryable: true },
+        ), turnId)
+        return
+      }
+      const routing = {
+        intent: requestedRouting,
+        target_work_id: targetTask?.id || targetWorkId || null,
+        target_status: targetTask?.status || null,
+        delivery: requestedRouting === 'modify_active_task' ? 'steer' : 'queue',
+      }
+      task = this.createWork({
+        turnId,
+        objective,
+        verbatimRequest,
+        submissionKey,
+        routing,
+      })`,
+  "delivery: requestedRouting === 'modify_active_task' ? 'steer' : 'queue'",
+)
+
+replaceOnce(
+  'server/src/agent/coordinator.mjs',
+  `  delivery = {},
+}) {`,
+  `  delivery = {},
+  routing = {},
+}) {`,
+  'delivery = {},\n  routing = {},',
+)
+
+replaceOnce(
+  'server/src/agent/coordinator.mjs',
+  `      objective: clean(objective),
+      ...(trustedBackendEvent`,
+  `      objective: clean(objective),
+      routing: {
+        intent: clean(routing.intent) || 'new_task',
+        target_work_id: clean(routing.target_work_id) || null,
+        target_status: clean(routing.target_status) || null,
+        delivery: routing.delivery === 'steer' ? 'steer' : 'queue',
+      },
+      ...(trustedBackendEvent`,
+  "delivery: routing.delivery === 'steer' ? 'steer' : 'queue'",
+)
+
+replaceOnce(
+  'server/src/agent/acp-backend-adapter.mjs',
+  `  async queryDelegatedWork(workId, question, {`,
+  `  async redirectDelegatedWork(workId, instruction, { ownerId } = {}) {
+    const run = this.delegatedWorkRuns.get(clean(workId))
+    const record = run?.delegation
+    const coordinatorRun = this.managedCoordinatorRuns.get(clean(workId))
+    const coordinator = this.coordinatorSessions.get(
+      coordinatorKey(ownerId, this.protocol),
+    )
+    const targetSessionId = record?.sessionId
+      || (coordinatorRun?.ownerId === clean(ownerId) ? coordinator?.sessionId : '')
+    if (!targetSessionId || (record && record.ownerId !== clean(ownerId))) {
+      throw new AgentError('ACTIVE_DELEGATION_NOT_FOUND: the target work is not running', {
+        status: 409,
+        protocol: this.protocol,
+      })
+    }
+    if (record && record.status !== 'running') {
+      throw new AgentError('ACTIVE_DELEGATION_NOT_FOUND: the target work is no longer running', {
+        status: 409,
+        protocol: this.protocol,
+      })
+    }
+    const endpoint = new URL(process.env.DSH_WEB_URL || 'http://127.0.0.1:3080')
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname)) {
+      throw new AgentError('DSH_REDIRECT_UNAVAILABLE: only a loopback DSH endpoint is allowed', {
+        status: 403,
+        protocol: this.protocol,
+      })
+    }
+    const rpcId = randomUUID()
+    const response = await fetch(\`${'${endpoint.origin}'}/api/session.prompt\`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId,
+        method: 'session.prompt',
+        payload: {
+          sessionId: targetSessionId,
+          mode: 'steer',
+          content: [{ type: 'text', text: clean(instruction) }],
+          clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+      }),
+    })
+    if (!response.ok) {
+      throw new AgentError(\`DSH_REDIRECT_FAILED: HTTP ${'${response.status}'}\`, {
+        status: response.status,
+        protocol: this.protocol,
+      })
+    }
+    const envelope = await response.json()
+    if (envelope?.rpcId !== rpcId || envelope?.result?.ok !== true) {
+      const reason = envelope?.result?.error?.message || 'unknown DSH redirect error'
+      throw new AgentError(\`DSH_REDIRECT_FAILED: ${'${reason}'}\`, {
+        status: 409,
+        protocol: this.protocol,
+      })
+    }
+    return {
+      status: 'redirected',
+      workId: clean(workId),
+      delegationId: record?.id || null,
+      sessionId: targetSessionId,
+      layer: record ? 'delegated' : 'coordinator',
+    }
+  }
+
+  async queryDelegatedWork(workId, question, {`,
+  'async redirectDelegatedWork(workId, instruction',
+)
+
+replaceOnce(
+  'server/src/agent/agent-client.mjs',
+  `  uiUrl(options = {}) {`,
+  `  redirectDelegatedWork(workId, instruction, options = {}) {
+    return this.adapter.redirectDelegatedWork(workId, instruction, options)
+  }
+
+  uiUrl(options = {}) {`,
+  'return this.adapter.redirectDelegatedWork(workId, instruction, options)',
+)
+
+replaceOnce(
+  'server/src/agent/agent-client.mjs',
+  `  uiUrl: (options = {}) => requireAgent().uiUrl(options),`,
+  `  redirectDelegatedWork: (workId, instruction, options = {}) =>
+    requireAgent().redirectDelegatedWork(workId, instruction, options),
+  uiUrl: (options = {}) => requireAgent().uiUrl(options),`,
+  'requireAgent().redirectDelegatedWork(workId, instruction, options)',
+)
+
+replaceOnce(
+  'server/src/agent/coordinator.mjs',
+  `  async run(input, options = {}) {`,
+  `  redirectDelegatedWork(workId, instruction, options = {}) {
+    return this.client.redirectDelegatedWork(workId, instruction, options)
+  }
+
+  async run(input, options = {}) {`,
+  'this.client.redirectDelegatedWork(workId, instruction, options)',
+)
+
+replaceOnce(
+  'server/src/voice/tools/tool-call-handler.mjs',
+  `      const routing = {
+        intent: requestedRouting,`,
+  `      if (requestedRouting === 'modify_active_task') {
+        await this.coordinator.redirectDelegatedWork(
+          targetTask.id,
+          objective,
+          { ownerId: this.ownerId },
+        )
+        await this.sendOutput(
+          callId,
+          {
+            status: 'redirected',
+            work_id: targetTask.id,
+            message: '已更新正在执行的任务。',
+          },
+          turnId,
+          targetTask.id,
+          {
+            response: {
+              instructions: [
+                '这条补充已经直接更新到原任务，不是新任务。',
+                '只需简短确认修改内容已经送达；不要声称任务完成。',
+              ].join(' '),
+            },
+          },
+        )
+        return
+      }
+      const routing = {
+        intent: requestedRouting,`,
+  "status: 'redirected',\n            work_id: targetTask.id",
+)
+
 // DSH-managed delegations are persisted by TaskManager and may not exist in
 // ACP Adapter's process-local delegatedWorkRuns map. Pass the durable record
 // into status queries so an in-memory cache miss is not reported as absence.
