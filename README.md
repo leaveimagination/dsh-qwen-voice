@@ -5,6 +5,10 @@
 这是一个基于 [Qwen Audio Agent](https://github.com/QwenAudio/qwen-audio-agent)
 构建的 DeepSeek Harness Web 实验性语音控制插件。
 
+> 当前 `1.0.0` 只连接 **DeepSeek Harness Web**：
+> `http://127.0.0.1:3080`。可以从 GitHub 独立安装，但首次使用仍需提供
+> DashScope API Key，并在网页中选择一个真实会话作为 Coordinator。
+
 > 如果没有 Qwen Audio Agent，就不会有这个项目。本项目使用 Qwen Audio
 > Agent 作为实时语音引擎，并在其基础上增加 DeepSeek Harness 插件界面、
 > ACP 桥接和多会话任务路由。衷心感谢 Qwen Audio Agent 的维护者和所有贡献者，
@@ -28,8 +32,7 @@ DSH 会话，并在悬浮面板中查看任务状态。
 
 ## 运行环境
 
-- DeepSeek Harness Web `0.1.0-rc.6`，或 **DeepSeek Harness Desktop**（内置同一
-  `0.1.0-rc.6` DSH 内核，自动创建 `desktop` profile）
+- DeepSeek Harness Web `0.1.0-rc.6`（当前开发环境也验证过 `0.1.0-rc.7`）
 - Node.js `22.22.2+`、`24.15.0+` 或 `26+`
 - npm `10+` 与 pnpm
 - 提供 Windows 启动脚本；插件和 ACP 桥接本身使用跨平台 Node.js
@@ -48,15 +51,35 @@ DSH 会话，并在悬浮面板中查看任务状态。
   `qwen3.5-omni-plus-realtime`；
 - 可选实时语音前台：Qwen Audio Agent 上游提供的 Hugging Face
   `speech-to-speech` 本地前台；
-- 后台任务 Agent：DeepSeek Harness Web `0.1.0-rc.6`，通过本项目的 ACP
-  Bridge 创建、继续、查询和取消 DSH 会话任务。DSH Desktop（`desktop`
-  profile，默认端口 `4975`）与 DSH Web（默认端口 `3080`）使用同一套 DSH
-  内核与 `/api/*` 会话 API，启动脚本会自动探测可用的 DSH 实例并接线。
+- 后台任务 Agent：DeepSeek Harness Web，通过本项目的 ACP Bridge 创建、继续、
+  查询、取消和重定向 DSH 会话任务。整条链路固定使用 `127.0.0.1:3080`，
+  不会自动探测或连接同时运行的 Desktop 实例，避免会话状态分裂。
 
 当前**不支持**直接使用 OpenAI Realtime、Gemini Live 或其他未在上游注册的
 云端实时语音 Provider。后台 Agent 支持某个模型供应商，不代表实时语音前台也支持该供应商。
 
-## 安装（即插即用）
+## 安装
+
+### Windows 一键安装（推荐）
+
+先启动 DSH Web 并确认能打开 `http://127.0.0.1:3080`，然后执行：
+
+```powershell
+git clone https://github.com/leaveimagination/dsh-qwen-voice.git
+cd dsh-qwen-voice
+.\scripts\install.cmd
+```
+
+安装器会检查 Node.js、按需安装 pnpm 11、安装依赖、应用 Qwen 兼容补丁、
+构建并注册两个 DSH 插件，然后以隐藏输入方式询问 DashScope API Key，最后启动
+语音 Runtime。真实 Key 只会写入本机
+`%USERPROFILE%\.config\qwaudio\config.env`，不会进入仓库。
+
+需要只安装、不立即启动时：
+
+```powershell
+.\scripts\install.cmd -SkipStart
+```
 
 ### 前置要求
 
@@ -66,7 +89,7 @@ DSH 会话，并在悬浮面板中查看任务状态。
 | pnpm | `10+`（推荐 `11.x`） |
 | DeepSeek Harness Web | `0.1.0-rc.6`（已安装并运行在 `127.0.0.1:3080`） |
 
-### 步骤
+### 手动安装
 
 ```powershell
 # 1. 克隆并安装依赖（含锁定的 Qwen Audio Agent 1.10.0）
@@ -101,55 +124,13 @@ $env:ACP_WORKSPACE = 'C:\path\to\workspace'
 pnpm start
 ```
 
-### 使用 DeepSeek Harness Desktop
-
-插件同样支持 [DeepSeek Harness Desktop](https://github.com/deepseek-ai/deepseek-harness)
-桌面客户端（桌面版内置同一 DSH `0.1.0-rc.6` 内核，运行在 `desktop` profile，
-默认端口 `4975`）。桌面版 Web 页面与独立 Web 版共用同一套 `/api/*` 会话 API，
-因此语音悬浮球、ACP Bridge 和多会话任务调度在桌面版中无需改代码即可工作。
-
-1. **安装到桌面 profile**（与 Web 版共用同一个开发目录，只注册一次即可）：
-
-   ```powershell
-   $env:DSH_PROFILE = 'desktop'
-   pnpm setup
-   ```
-
-2. **启动**（`pnpm start` 会自动探测可用的 DSH 实例）：
-
-   ```powershell
-   pnpm start
-   ```
-
-   `start.mjs` 会依次探测 `4975`（桌面版）与 `3080`（独立 Web 版），并自动：
-   - 把第一个可用的 DSH 实例作为 ACP Bridge 的目标（`DSH_WEB_URL`）；
-   - 把所有可用的 DSH 实例 origin 合并进 Gateway 的允许列表
-     （`QWEN_AUDIO_AGENT_ALLOWED_ORIGINS`），所以无论悬浮球从桌面版还是
-     Web 页面加载，都能连上同一个本地 Gateway。
-
-3. **刷新桌面版页面**（右下角出现悬浮语音球），首次使用时照常在目标会话
-   点击「设为协调会话」。
-
-多实例并存时，可以显式指定 Bridge 连接哪个 DSH：
-
-```powershell
-$env:DSH_WEB_URL = 'http://127.0.0.1:4975'   # 桌面版
-# 或
-$env:DSH_WEB_URL = 'http://127.0.0.1:3080'   # 独立 Web 版
-pnpm start
-```
-
-已知限制：桌面版必须在启动语音前已经打开（探测只认存活实例）；桌面版默认
-端口随其自身配置而定，若你的桌面版端口不是 `4975`，请用 `DSH_WEB_URL`
-显式指定。
-
 ### 配置语音凭证（必做）
 
 默认语音前台使用 DashScope 实时语音，需要你自己的 API Key：
 
-1. 启动一次后，编辑 Qwen Audio Agent 的本地配置：
+使用一键安装器时会自动引导配置。手动安装则编辑：
    `%USERPROFILE%\.config\qwaudio\config.env`
-2. 设置（`QWEN_AUDIO_REALTIME_PROVIDER` 保持 `dashscope`）：
+并设置（可参考仓库中的 `config.env.example`）：
 
 ```ini
 DASHSCOPE_API_KEY=sk-你的Key
@@ -157,7 +138,7 @@ QWEN_AUDIO_REALTIME_PROVIDER=dashscope
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 ```
 
-3. 重启 `pnpm start` 使配置生效。
+重启 `pnpm start` 使配置生效。
 
 凭证只保存在本地配置中；仓库和浏览器插件包均不包含任何 API Key。
 
@@ -172,6 +153,8 @@ Coordinator 会话调度到多个子会话并行执行；切换 Harness 会话�
   `dsh plugin --profile web list` 中可见。
 - **Gateway 起不来**：查看启动输出，确认 `config.env` 中
   `QWEN_AUDIO_REALTIME_PROVIDER` 为 `dashscope`（不支持其他值）。
+- **提示 DSH Web 不可达**：先启动 DSH Web，并确认
+  `http://127.0.0.1:3080` 可以正常打开；当前版本不会回退到 Desktop。
 - **取消任务卡住**：当前版本已修复取消死锁（v1.0.0+），如仍异常请附
   Gateway 日志提 issue。
 
@@ -186,7 +169,7 @@ Coordinator 会话调度到多个子会话并行执行；切换 Harness 会话�
 
 - 为同时发出的语音任务建立独立的协调通道；
 - 每个认证用户只保留一个长期 ACP Coordinator Session；
-- 允许管理员明确配置的 DSH 本机回环地址跨端口访问 Gateway。
+- 允许固定的 DSH Web 本机回环地址访问 Gateway；
 - 安装带鉴权的本地 DSH Session API，并接入 Task Manager 生命周期；
 - 在任务快照中保留目标 Session 身份；
 - 存在旧的“继续时直接选第一个 Session”分支时将其禁用。
@@ -220,7 +203,8 @@ ACP 桥接只允许访问本机回环地址。悬浮语音客户端默认连接
 
 ## 已知限制
 
-- 当前开发预览版只验证了 DSH `0.1.0-rc.6`；
+- 当前开发预览版验证了 DSH Web `0.1.0-rc.6` 和 `0.1.0-rc.7`；
+- 当前版本不支持 DSH Desktop，也不支持 Web/Desktop 多实例自动切换；
 - 云端实时语音前台当前只验证了 DashScope Qwen Realtime；
 - Qwen 兼容补丁是临时方案，后续应尽量替换为上游正式扩展接口；
 - 会话名称根据语音任务目标生成，表达含糊时可能仍需手动重命名。

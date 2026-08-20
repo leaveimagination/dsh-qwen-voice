@@ -11,7 +11,7 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
-  "files": ["lib", "bridge", "scripts", "start-qwen-dsh-voice.example.cmd", "cordis.patch.yml", "README.md", "README_EN.md", "LICENSE", "NOTICE"],
+  "files": ["lib", "bridge", "scripts/install.cmd", "scripts/install.ps1", "scripts/overlays", "scripts/patch-qwen-audio-agent.mjs", "scripts/sanitize-build.mjs", "scripts/setup.mjs", "scripts/start.mjs", "config.env.example", "start-qwen-dsh-voice.example.cmd", "cordis.patch.yml", "README.md", "README_EN.md", "LICENSE", "NOTICE"],
   "license": "MIT",
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },

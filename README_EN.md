@@ -2,8 +2,13 @@
 
 [简体中文](./README.md) | English
 
-Experimental voice-control plugin for DeepSeek Harness Web and Desktop,
+Experimental voice-control plugin for DeepSeek Harness Web,
 **built on top of** [Qwen Audio Agent](https://github.com/QwenAudio/qwen-audio-agent).
+
+> Version `1.0.0` connects only to **DeepSeek Harness Web** at
+> `http://127.0.0.1:3080`. It can be installed independently from GitHub, but
+> first use still requires a DashScope API key and a real DSH session selected
+> as the Coordinator in the Web UI.
 
 > This project would not exist without Qwen Audio Agent. It reuses Qwen Audio
 > Agent as the realtime voice engine and adds the DeepSeek Harness plugin UI,
@@ -17,8 +22,8 @@ show live task state, interrupt playback, and announce results as tasks finish.
 
 ## Compatibility
 
-- DeepSeek Harness Web `0.1.0-rc.6`, or **DeepSeek Harness Desktop** (embeds the
-  same `0.1.0-rc.6` DSH kernel and auto-creates a `desktop` profile)
+- DeepSeek Harness Web `0.1.0-rc.6` (the current development environment also
+  verifies `0.1.0-rc.7`)
 - Qwen Audio Agent `1.10.0`
 - Node.js supported by both upstream projects
 - Windows launcher included; the plugin and bridge are cross-platform Node.js
@@ -36,17 +41,38 @@ This release supports:
   `qwen3.5-omni-plus-realtime`;
 - the optional local Hugging Face `speech-to-speech` frontend provided by
   upstream Qwen Audio Agent;
-- DeepSeek Harness Web `0.1.0-rc.6` as the backend task Agent through this
-  project's ACP bridge. DSH Desktop (`desktop` profile, default port `4975`)
-  and DSH Web (default port `3080`) share the same DSH kernel and `/api/*`
-  session API; the launcher auto-detects reachable DSH instances and wires
-  them up.
+- DeepSeek Harness Web as the backend task Agent through this project's ACP
+  bridge. The complete chain is pinned to `127.0.0.1:3080`; it never probes or
+  connects to a simultaneously running Desktop instance, which prevents split
+  session ownership.
 
 This release does **not** directly support OpenAI Realtime, Gemini Live, or
 other cloud realtime providers not registered by upstream Qwen Audio Agent.
 Backend model-provider support does not imply realtime voice-provider support.
 
-## Install (clone & run)
+## Install
+
+### One-command Windows installer (recommended)
+
+Start DSH Web and confirm `http://127.0.0.1:3080` opens, then run:
+
+```powershell
+git clone https://github.com/leaveimagination/dsh-qwen-voice.git
+cd dsh-qwen-voice
+.\scripts\install.cmd
+```
+
+The installer validates Node.js, installs pnpm 11 when missing, installs all
+dependencies, applies the Qwen compatibility patch, builds and registers both
+DSH plugins, asks for the DashScope API key with hidden input, and starts the
+voice runtime. The real key is written only to
+`%USERPROFILE%\.config\qwaudio\config.env` and never to the repository.
+
+To install without starting immediately:
+
+```powershell
+.\scripts\install.cmd -SkipStart
+```
 
 ### Prerequisites
 
@@ -54,9 +80,9 @@ Backend model-provider support does not imply realtime voice-provider support.
 | --- | --- |
 | Node.js | `22.22.2+`, `24.15.0+`, or `26+` |
 | pnpm | `10+` (recommended `11.x`) |
-| DeepSeek Harness Web | `0.1.0-rc.6` (installed and running at `127.0.0.1:3080`), or DeepSeek Harness Desktop (running, default `127.0.0.1:4975`) |
+| DeepSeek Harness Web | `0.1.0-rc.6` or `0.1.0-rc.7`, installed and running at `127.0.0.1:3080` |
 
-### Steps
+### Manual install
 
 ```powershell
 # 1. Clone and install (includes the pinned Qwen Audio Agent 1.10.0)
@@ -93,58 +119,13 @@ $env:ACP_WORKSPACE = 'C:\path\to\workspace'
 pnpm start
 ```
 
-### Using DeepSeek Harness Desktop
-
-The plugin also works with the DeepSeek Harness Desktop client (it embeds the
-same DSH `0.1.0-rc.6` kernel, runs the `desktop` profile, and listens on port
-`4975` by default). The Desktop frontend shares the same `/api/*` session API
-as the standalone Web build, so the floating orb, ACP Bridge, and multi-session
-task routing work without code changes.
-
-1. **Register into the desktop profile** (same dev directory as Web; register
-   once per profile):
-
-   ```powershell
-   $env:DSH_PROFILE = 'desktop'
-   pnpm setup
-   ```
-
-2. **Start** (`pnpm start` auto-detects the reachable DSH instance):
-
-   ```powershell
-   pnpm start
-   ```
-
-   `start.mjs` probes `4975` (Desktop) then `3080` (standalone Web) and:
-   - uses the first reachable DSH instance as the ACP Bridge target
-     (`DSH_WEB_URL`);
-   - merges every reachable DSH instance origin into the Gateway allow-list
-     (`QWEN_AUDIO_AGENT_ALLOWED_ORIGINS`), so the floating orb connects to the
-     same local Gateway whether it loaded from the Desktop or Web page.
-
-3. **Refresh the Desktop page** (the floating orb appears), then click
-   “Set as coordinator session” in the target session on first use.
-
-When several DSH instances run side by side, point the bridge explicitly:
-
-```powershell
-$env:DSH_WEB_URL = 'http://127.0.0.1:4975'   # Desktop
-# or
-$env:DSH_WEB_URL = 'http://127.0.0.1:3080'   # standalone Web
-pnpm start
-```
-
-Known limitation: Desktop must already be open before starting voice (the probe
-only recognizes live instances); if your Desktop port differs from `4975`, set
-`DSH_WEB_URL` explicitly.
-
 ### Configure voice credentials (required)
 
 The default frontend uses DashScope realtime voice and needs your own API key:
 
-1. After the first start, edit the Qwen Audio Agent local config:
-   `%USERPROFILE%\.config\qwaudio\config.env`
-2. Set (`QWEN_AUDIO_REALTIME_PROVIDER` stays `dashscope`):
+The Windows installer guides this step automatically. For a manual install,
+edit `%USERPROFILE%\.config\qwaudio\config.env` and set the following values
+(see `config.env.example`):
 
 ```ini
 DASHSCOPE_API_KEY=sk-your-key
@@ -152,7 +133,7 @@ QWEN_AUDIO_REALTIME_PROVIDER=dashscope
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 ```
 
-3. Restart `pnpm start` for the config to take effect.
+Restart `pnpm start` for the config to take effect.
 
 Credentials stay in the local config; no API key is included in this repository
 or in the browser plugin bundle.
@@ -171,6 +152,8 @@ connection alive.
 - **Gateway fails to start**: check the startup output and confirm
   `QWEN_AUDIO_REALTIME_PROVIDER=dashscope` in `config.env` (no other value is
   supported).
+- **DSH Web is reported unreachable**: start DSH Web and confirm
+  `http://127.0.0.1:3080` opens. This release does not fall back to Desktop.
 - **Cancelling a task hangs**: the cancellation deadlock is fixed in v1.0.0+;
   if it still misbehaves, open an issue with the Gateway log.
 
@@ -185,7 +168,7 @@ Qwen Audio Agent 1.10.0 runtime bundled inside this project:
 
 - separate coordinator lanes for simultaneous voice turns;
 - keep one persistent ACP Coordinator Session per authenticated owner;
-- allow an explicitly configured DSH loopback origin on another port.
+- allow the fixed local DSH Web origin to access the Gateway;
 - install the authenticated local DSH Session API and Task Manager lifecycle;
 - expose target Session identity in task snapshots;
 - disable the obsolete first-session continuation fallback when present.
@@ -224,7 +207,10 @@ the local gateway at `127.0.0.1:3101`.
 
 ## Known limitations
 
-- Developer-preview compatibility is pinned to DSH `0.1.0-rc.6`.
+- Developer-preview compatibility is verified with DSH Web `0.1.0-rc.6` and
+  `0.1.0-rc.7`.
+- DSH Desktop and automatic Web/Desktop multi-instance switching are not
+  supported in this release.
 - The only verified cloud realtime voice frontend is DashScope Qwen Realtime.
 - The Qwen compatibility patch is temporary and should eventually be replaced
   by upstream extension points.

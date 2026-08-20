@@ -37,12 +37,18 @@ async function isDshInstanceAlive(baseUrl) {
   }
 }
 
-const bridgeUrl = process.env.DSH_WEB_URL || DEFAULT_DSH_WEB_URL
+const bridgeUrl = DEFAULT_DSH_WEB_URL
 const parsedBridgeUrl = new URL(bridgeUrl)
 if (!['127.0.0.1', 'localhost', '[::1]'].includes(parsedBridgeUrl.hostname)) {
   throw new Error(`DSH_WEB_URL must be a loopback URL, got ${parsedBridgeUrl.hostname}`)
 }
 const dshAlive = await isDshInstanceAlive(parsedBridgeUrl.origin)
+if (!dshAlive) {
+  throw new Error([
+    `DeepSeek Harness Web is not reachable at ${parsedBridgeUrl.origin}.`,
+    'Start DSH Web first, confirm the page opens, then run pnpm start again.',
+  ].join(' '))
+}
 const mergedOrigins = [
   ...String(process.env.QWEN_AUDIO_AGENT_ALLOWED_ORIGINS || '')
     .split(',')

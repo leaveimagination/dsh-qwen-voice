@@ -1,0 +1,8 @@
+# Local-only launchers and live E2E driver.
+scripts/autostart-voice.cmd
+scripts/autostart-voice.vbs
+scripts/e2e-active-redirect.mjs
+
+# Local logs and generated archives.
+*.log
+*.tgz

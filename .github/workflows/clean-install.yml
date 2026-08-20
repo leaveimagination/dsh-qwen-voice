@@ -48,5 +48,19 @@ jobs:
       - name: Test ACP bridge
         run: pnpm --dir bridge test
 
-      - name: Verify bundled CLI
-        run: node scripts/start.mjs --help
+      - name: Verify launch scripts
+        shell: pwsh
+        run: |
+          node --check scripts/start.mjs
+          node --check scripts/patch-qwen-audio-agent.mjs
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/install.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count) {
+            $errors | Format-List
+            exit 1
+          }
