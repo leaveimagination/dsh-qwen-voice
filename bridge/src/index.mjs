@@ -106,10 +106,10 @@ export class DshWebClient {
     }, signal)
   }
 
-  prompt(sessionId, text, signal) {
+  prompt(sessionId, text, signal, mode = 'queue') {
     return this.call('session.prompt', {
       sessionId,
-      mode: 'queue',
+      mode,
       content: [{ type: 'text', text }],
       clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     }, signal)
@@ -202,7 +202,21 @@ export class DshWebAcpAgent {
       const routedText = titleHint
         ? `${titleHint}\n\n${text}`
         : text
-      await this.client.prompt(params.sessionId, routedText, controller.signal)
+      // Interjection: prefer steering into the running turn (steps-level
+      // injection) so follow-ups reach an executing agent immediately. Steer
+      // only works while the target session is running; when it is idle (or
+      // the steer window just closed) DSH rejects it, so fall back to queue,
+      // which waits for the next turn boundary — the DSH-composer "queue"
+      // delivery. New sessions never have a running turn, so they naturally
+      // fall back to queue as well.
+      const deliver = async (mode) => {
+        await this.client.prompt(params.sessionId, routedText, controller.signal, mode)
+      }
+      try {
+        await deliver('steer')
+      } catch (steerError) {
+        await deliver('queue')
+      }
       let history
       while (true) {
         history = await this.client.history(params.sessionId, controller.signal)
